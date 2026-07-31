@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: Build & Test (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app
+
+      - name: swift build
+        run: swift build 2>&1
+
+      - name: swift test
+        run: swift test 2>&1
+
+      - name: xcodebuild TacosMind-macOS
+        run: |
+          xcodebuild build \
+            -project TacosMind.xcodeproj \
+            -scheme TacosMind-macOS \
+            -destination 'platform=macOS' \
+            2>&1
+
+      - name: xcodebuild TacosMind-iOS
+        run: |
+          xcodebuild build \
+            -project TacosMind.xcodeproj \
+            -scheme TacosMind-iOS \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+            2>&1
+
+  # Scoped deliberately to Meow/GeneratorCore only — the rest of this package
+  # (AppCore, ArticleEditorFeature, AIChatFeature, ...) imports SwiftUI/AppKit/UIKit
+  # unconditionally and has no business being asked to build on Linux at all. A bare
+  # `swift build`/`swift test` here would attempt the whole package; explicit
+  # `--target`/`--filter` avoids depending on whatever makes that not immediately
+  # fail (unconfirmed — see the import PR description).
+  test-linux:
+    name: Build & Test Meow (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Meow
+        run: swift build --target Meow 2>&1
+
+      - name: Test GeneratorCore
+        run: swift test --filter GeneratorCoreTests 2>&1

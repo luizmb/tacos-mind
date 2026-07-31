@@ -1,0 +1,463 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 100;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0FF34710248DB96EED5033CC /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 74D03CED342ADA3EC5D1C1EC /* AppCore */; };
+		1F0A8D40A16C2B28477552AA /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 74D03CED342ADA3EC5D1C1EC /* AppCore */; };
+		341E7A05720CB9CC468014A7 /* TacosMindApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A981BC68D4C1AED48536D982 /* TacosMindApp.swift */; };
+		F6495E55A3DE4DBBA3F91F92 /* TacosMindApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A981BC68D4C1AED48536D982 /* TacosMindApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		820BE42B553085BD21B1DF49 /* TacosMind-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TacosMind-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		827275E2EF6A2394487320D3 /* TacosMind-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TacosMind-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A981BC68D4C1AED48536D982 /* TacosMindApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TacosMindApp.swift; sourceTree = "<group>"; };
+		F57C3FD84833F526646EF661 /* TacosMind */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TacosMind; path = .; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		85E15145599C700A2BEC45CE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				0FF34710248DB96EED5033CC /* AppCore in Frameworks */,
+			);
+		};
+		93222AB0977A56417B319C52 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+				1F0A8D40A16C2B28477552AA /* AppCore in Frameworks */,
+			);
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A3AF8A597D58EC97B3D3CF3B /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				F57C3FD84833F526646EF661 /* TacosMind */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		296E11F3AC249366C56189DE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */,
+			);
+			name = Config;
+			path = Config;
+			sourceTree = "<group>";
+		};
+		B27C3C492BBD68562C09E3FD = {
+			isa = PBXGroup;
+			children = (
+				B870F9E8B70216F64D075B48 /* App */,
+				296E11F3AC249366C56189DE /* Config */,
+				A3AF8A597D58EC97B3D3CF3B /* Packages */,
+				D176EDACCF2CAD6A0F60D14E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B870F9E8B70216F64D075B48 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A981BC68D4C1AED48536D982 /* TacosMindApp.swift */,
+			);
+			name = App;
+			path = Sources/App;
+			sourceTree = "<group>";
+		};
+		D176EDACCF2CAD6A0F60D14E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				820BE42B553085BD21B1DF49 /* TacosMind-macOS.app */,
+				827275E2EF6A2394487320D3 /* TacosMind-iOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1AA48E43E96D03250780C6B3 /* TacosMind-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8DF1383A7931EC1A8BCB9411 /* Build configuration list for PBXNativeTarget "TacosMind-macOS" */;
+			buildPhases = (
+				D4C118240A1AEFA4945FB26B /* Sources */,
+				93222AB0977A56417B319C52 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			name = "TacosMind-macOS";
+			packageProductDependencies = (
+				74D03CED342ADA3EC5D1C1EC /* AppCore */,
+			);
+			productName = "TacosMind-macOS";
+			productReference = 820BE42B553085BD21B1DF49 /* TacosMind-macOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		35397C5EA463DA3CC4D3AE8A /* TacosMind-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2BC926A93FCDEDB73F464C4E /* Build configuration list for PBXNativeTarget "TacosMind-iOS" */;
+			buildPhases = (
+				B6BA3CCD917665476478506F /* Sources */,
+				85E15145599C700A2BEC45CE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			name = "TacosMind-iOS";
+			packageProductDependencies = (
+				74D03CED342ADA3EC5D1C1EC /* AppCore */,
+			);
+			productName = "TacosMind-iOS";
+			productReference = 827275E2EF6A2394487320D3 /* TacosMind-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B137FE4EEFD704A75615F1A4 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+			};
+			buildConfigurationList = 5BF6458B87A8CA9B907564DF /* Build configuration list for PBXProject "TacosMind" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B27C3C492BBD68562C09E3FD;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2A23DF9A9FE1175E044F626D /* XCLocalSwiftPackageReference "." */,
+				B79C58D40D828D5BB64A18E4 /* XCRemoteSwiftPackageReference "SwiftRex" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D176EDACCF2CAD6A0F60D14E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				1AA48E43E96D03250780C6B3 /* TacosMind-macOS */,
+				35397C5EA463DA3CC4D3AE8A /* TacosMind-iOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B6BA3CCD917665476478506F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				F6495E55A3DE4DBBA3F91F92 /* TacosMindApp.swift in Sources */,
+			);
+		};
+		D4C118240A1AEFA4945FB26B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+				341E7A05720CB9CC468014A7 /* TacosMindApp.swift in Sources */,
+			);
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		1AA7F222E6F64EC06B59E5E9 /* Debug configuration for PBXNativeTarget "TacosMind-macOS" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_CFBundleDisplayName = "Taco's Mind";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used to talk to the writing assistant.";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to transcribe what you say to the writing assistant.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.lu.TacosMind.macOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		5EFCBD4530C3056F4D3593CC /* Release configuration for PBXProject "TacosMind" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		6415100C51BE98316BCB342A /* Release configuration for PBXNativeTarget "TacosMind-iOS" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used to talk to the writing assistant.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to transcribe what you say to the writing assistant.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Taco's Mind";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.lu.TacosMind.iOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		7253B8847A319EF3D026D297 /* Release configuration for PBXNativeTarget "TacosMind-macOS" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_CFBundleDisplayName = "Taco's Mind";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used to talk to the writing assistant.";
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to transcribe what you say to the writing assistant.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.lu.TacosMind.macOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B91D1C4DF017B2339581CDD1 /* Debug configuration for PBXNativeTarget "TacosMind-iOS" */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used to talk to the writing assistant.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to transcribe what you say to the writing assistant.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Taco's Mind";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.lu.TacosMind.iOS;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		ED4C9CE4758C67CA8BE435BA /* Debug configuration for PBXProject "TacosMind" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		2BC926A93FCDEDB73F464C4E /* Build configuration list for PBXNativeTarget "TacosMind-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B91D1C4DF017B2339581CDD1 /* Debug configuration for PBXNativeTarget "TacosMind-iOS" */,
+				6415100C51BE98316BCB342A /* Release configuration for PBXNativeTarget "TacosMind-iOS" */,
+			);
+			defaultConfigurationName = Debug;
+		};
+		5BF6458B87A8CA9B907564DF /* Build configuration list for PBXProject "TacosMind" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				ED4C9CE4758C67CA8BE435BA /* Debug configuration for PBXProject "TacosMind" */,
+				5EFCBD4530C3056F4D3593CC /* Release configuration for PBXProject "TacosMind" */,
+			);
+			defaultConfigurationName = Debug;
+		};
+		8DF1383A7931EC1A8BCB9411 /* Build configuration list for PBXNativeTarget "TacosMind-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1AA7F222E6F64EC06B59E5E9 /* Debug configuration for PBXNativeTarget "TacosMind-macOS" */,
+				7253B8847A319EF3D026D297 /* Release configuration for PBXNativeTarget "TacosMind-macOS" */,
+			);
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		2A23DF9A9FE1175E044F626D /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B79C58D40D828D5BB64A18E4 /* XCRemoteSwiftPackageReference "SwiftRex" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SwiftRex/SwiftRex.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+			traits = (
+				ReactiveConcurrency,
+				default,
+			);
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		74D03CED342ADA3EC5D1C1EC /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = B137FE4EEFD704A75615F1A4 /* Project object */;
+}

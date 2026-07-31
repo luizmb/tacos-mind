@@ -1,0 +1,9 @@
+.build/
+.DS_Store
+dist/
+.swiftpm/
+xcuserdata/
+DerivedData/
+
+# Local dev-signing overrides — never commit a real team id
+Config/Local.xcconfig

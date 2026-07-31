@@ -1,0 +1,219 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - 'release/*'
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ============================================================================
+  # RELEASE CANDIDATE BUILD - Triggered on release/* branches
+  # ============================================================================
+
+  rc-test:
+    name: RC - Test & Validate
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app
+
+      - name: swift build
+        run: swift build 2>&1
+
+      - name: swift test
+        run: swift test 2>&1
+
+      - name: xcodebuild TacosMind-macOS
+        run: |
+          xcodebuild build \
+            -project TacosMind.xcodeproj \
+            -scheme TacosMind-macOS \
+            -destination 'platform=macOS' \
+            2>&1
+
+      - name: xcodebuild TacosMind-iOS
+        run: |
+          xcodebuild build \
+            -project TacosMind.xcodeproj \
+            -scheme TacosMind-iOS \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+            2>&1
+
+      - name: Extract RC Version
+        id: version
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          VERSION=${BRANCH#release/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "RC Version: ${VERSION}"
+
+  rc-notify-status:
+    name: RC - Notify Status
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+    needs: [rc-test]
+    steps:
+      - name: Extract Version
+        id: version
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          VERSION=${BRANCH#release/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Success Notification
+        if: success()
+        run: |
+          echo "::notice::Release Candidate ${{ steps.version.outputs.version }} is ready for promotion"
+          echo "Run 'Promote RC to Release' workflow when ready."
+
+      - name: Failure Notification
+        if: failure()
+        run: |
+          echo "::error::Release Candidate build failed — review failed jobs and push fixes to ${{ github.ref_name }}"
+
+  # ============================================================================
+  # RELEASE PROMOTION - Triggered on version tags (v*.*.*)
+  # ============================================================================
+
+  promote-test:
+    name: Promote - Verify Tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate Tag Format
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Invalid tag format: $TAG"
+            echo "Expected format: vX.Y.Z"
+            exit 1
+          fi
+          echo "::notice::Promoting tag: $TAG"
+
+      - name: Verify Tag on Release Branch
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION=${TAG#v}
+
+          if git show-ref --verify --quiet "refs/remotes/origin/release/$VERSION"; then
+            echo "::notice::Found corresponding release branch: release/$VERSION"
+          else
+            echo "::warning::No release branch found for release/$VERSION"
+            echo "It's OK to proceed if the tag is on main branch"
+          fi
+
+  create-release:
+    name: Promote - Create Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: promote-test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          TAG="${{ github.ref_name }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 ${TAG}^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            BODY="Initial release"
+          else
+            COMMITS=$(git log ${PREV_TAG}..${TAG} --oneline)
+            BODY="## Changes
+
+          ${COMMITS}"
+          fi
+
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$BODY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Release ${{ github.ref_name }}" \
+            --notes "${{ steps.notes.outputs.body }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Built and attached separately from `create-release` (rather than reusing the RC
+  # build's own artifacts) so the exact binary ios.lu downloads is built in the same
+  # environment ios.lu's own publish workflow runs in (ubuntu-latest + swift:6.3
+  # container) — no cross-platform ABI surprises between what was RC-tested on macOS
+  # and what actually ships.
+  build-meow-binary:
+    name: Promote - Build Meow (Linux)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    needs: promote-test
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Meow (release)
+        run: swift build -c release --product Meow
+
+      - name: Package binary
+        run: |
+          mkdir -p artifact
+          cp .build/release/Meow artifact/Meow
+          tar -czf Meow-linux-x86_64.tar.gz -C artifact Meow
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Meow-linux-x86_64
+          path: Meow-linux-x86_64.tar.gz
+
+  attach-meow-binary:
+    name: Promote - Attach Meow to Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [create-release, build-meow-binary]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Meow-linux-x86_64
+
+      - name: Upload release asset
+        run: gh release upload "${{ github.ref_name }}" Meow-linux-x86_64.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  notify-promotion-status:
+    name: Promote - Notify Status
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    needs: [promote-test, create-release, attach-meow-binary]
+    steps:
+      - name: Success Notification
+        if: success()
+        run: |
+          echo "::notice::Release ${{ github.ref_name }} published successfully"
+          echo ""
+          echo "View release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+
+      - name: Failure Notification
+        if: failure()
+        run: |
+          echo "::error::Release promotion failed for tag ${{ github.ref_name }}"
+          echo ""
+          echo "This tag has been pushed but the release may not be complete."
+          echo "See workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo ""
+          echo "Recovery:"
+          echo "1. Delete the tag: git tag -d ${{ github.ref_name }} && git push origin :refs/tags/${{ github.ref_name }}"
+          echo "2. Fix issues locally"
+          echo "3. Retry: git tag ${{ github.ref_name }} && git push origin ${{ github.ref_name }}"

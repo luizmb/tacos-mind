@@ -1,0 +1,96 @@
+{
+  "originHash" : "61be635d3ab041172b46d9c7acac7e0ad528588848c1af13800ed1cf5b554e50",
+  "pins" : [
+    {
+      "identity" : "fp",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/luizmb/FP.git",
+      "state" : {
+        "revision" : "3ff729badf4be84773f9681350e63513dddd4339",
+        "version" : "2.2.0"
+      }
+    },
+    {
+      "identity" : "hourglass",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/luizmb/Hourglass.git",
+      "state" : {
+        "revision" : "c122a98281bdd61a1c231c111fe643e49a6eaa9c",
+        "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "networktools",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/luizmb/NetworkTools.git",
+      "state" : {
+        "revision" : "4721b315a0ab3ac4e44496cc04ab5c1f759557f7",
+        "version" : "0.8.0"
+      }
+    },
+    {
+      "identity" : "reactiveconcurrency",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/luizmb/ReactiveConcurrency.git",
+      "state" : {
+        "revision" : "35ac52966c4c514bca05ed23bd3f2f621ea77e0f",
+        "version" : "1.1.0"
+      }
+    },
+    {
+      "identity" : "swift-atomics",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-atomics.git",
+      "state" : {
+        "revision" : "0442cb5a3f98ab802acb777929fdb446bda11a34",
+        "version" : "1.3.1"
+      }
+    },
+    {
+      "identity" : "swift-collections",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-collections.git",
+      "state" : {
+        "revision" : "a0cb0954ecb21e4e31b0070e6ed5674e8556685a",
+        "version" : "1.6.0"
+      }
+    },
+    {
+      "identity" : "swift-nio",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-nio.git",
+      "state" : {
+        "revision" : "0b18836bd8b0162e7e17a995a3fbee20ed8f3b2b",
+        "version" : "2.101.3"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "79e4b74a295b6eb74a8b585e3a39d29e70c1dbd1",
+        "version" : "603.0.2"
+      }
+    },
+    {
+      "identity" : "swift-system",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/apple/swift-system.git",
+      "state" : {
+        "revision" : "50688cacbd41d547e9eb9f7a213542340b7c442b",
+        "version" : "1.7.5"
+      }
+    },
+    {
+      "identity" : "swiftrex",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SwiftRex/SwiftRex.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "4138ec632e690618b9af02cdb59fba0e067f92ca"
+      }
+    }
+  ],
+  "version" : 3
+}
