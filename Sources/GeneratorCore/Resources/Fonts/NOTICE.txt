@@ -1,0 +1,7 @@
+JetBrains Mono
+Copyright 2000-2020 JetBrains s.r.o.
+Authors: Philipp Nurullin, Konstantin Bulenkov
+https://www.jetbrains.com
+
+Licensed under the Apache License, Version 2.0.
+http://www.apache.org/licenses/LICENSE-2.0
