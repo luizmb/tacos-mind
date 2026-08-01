@@ -261,6 +261,8 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used to talk to the writing assistant.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to transcribe what you say to the writing assistant.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Taco's Mind";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -321,6 +323,8 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Used to talk to the writing assistant.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Used to transcribe what you say to the writing assistant.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_UIFileSharingEnabled = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Taco's Mind";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

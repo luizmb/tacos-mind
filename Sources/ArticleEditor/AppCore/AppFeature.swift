@@ -356,7 +356,10 @@ public enum AppScopes: Rig {
         .environment { (world: World) in
             GitHubSyncFeature.Environment(
                 loadGitHubSettings: world.loadGitHubSettings,
-                saveGitHubSettings: world.saveGitHubSettings,
+                linkRepository: world.linkRepository,
+                updateBranch: world.updateBranch,
+                unlinkRepository: world.unlinkRepository,
+                isArticlesDirEmpty: world.isArticlesDirEmpty,
                 previewPull: world.previewPull,
                 applyPull: world.applyPull,
                 commitLocalChanges: world.commitLocalChanges,

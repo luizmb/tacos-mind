@@ -50,4 +50,19 @@ enum GitHubTokenKeychain {
         }
         return .success(())
     }
+
+    /// Unlinking a repo removes the token entirely rather than leaving a stale one
+    /// behind — `errSecItemNotFound` isn't an error here, there's just nothing to remove.
+    static func delete() -> Result<Void, GitHubError> {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            return .failure(.network("Keychain delete failed (status \(status))"))
+        }
+        return .success(())
+    }
 }

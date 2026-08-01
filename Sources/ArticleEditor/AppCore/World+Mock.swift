@@ -41,7 +41,10 @@ extension World {
         speak: @escaping @Sendable (String) -> Publisher<Void, SpeechError> = { _ in .just(()) },
         startListening: @escaping @Sendable () -> Publisher<TranscriptUpdate, SpeechError> = { .empty() },
         loadGitHubSettings: @escaping @Sendable () -> Publisher<GitHubSettings?, Never> = { .just(nil) },
-        saveGitHubSettings: @escaping @Sendable (GitHubSettings) -> Publisher<Void, GitHubError> = { _ in .just(()) },
+        linkRepository: @escaping @Sendable (GitHubSettings) -> Publisher<Void, GitHubError> = { _ in .just(()) },
+        updateBranch: @escaping @Sendable (String) -> Publisher<Void, GitHubError> = { _ in .just(()) },
+        unlinkRepository: @escaping @Sendable () -> Publisher<Void, GitHubError> = { .just(()) },
+        isArticlesDirEmpty: @escaping @Sendable () -> Publisher<Bool, Never> = { .just(true) },
         previewPull: @escaping @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError> = { _ in
             .just(PullPreview(toAdd: [], toUpdate: [], localOnlyChanges: []))
         },
@@ -76,7 +79,10 @@ extension World {
             speak: speak,
             startListening: startListening,
             loadGitHubSettings: loadGitHubSettings,
-            saveGitHubSettings: saveGitHubSettings,
+            linkRepository: linkRepository,
+            updateBranch: updateBranch,
+            unlinkRepository: unlinkRepository,
+            isArticlesDirEmpty: isArticlesDirEmpty,
             previewPull: previewPull,
             applyPull: applyPull,
             commitLocalChanges: commitLocalChanges,
