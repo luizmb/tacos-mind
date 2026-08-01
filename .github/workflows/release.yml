@@ -56,6 +56,70 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             2>&1
 
+      # Real signing, so a bad cert/profile/team-id fails HERE, not on the TestFlight
+      # upload after the RC already got tagged and released. See promote-testflight.yml's
+      # identical steps for why the .p12 is imported (not left to -allowProvisioningUpdates
+      # to auto-create — Apple caps active distribution certs per team, so CI must reuse
+      # one pinned cert rather than mint a fresh one every run) and why the API key lands
+      # at Xcode's well-known search path.
+      - name: Import distribution certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.DISTRIBUTION_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DISTRIBUTION_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/cert.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Set up App Store Connect API key
+        env:
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$API_KEY_P8" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
+
+      # Written at build time, gitignored, never committed — DEVELOPMENT_TEAM only ever
+      # exists in this file or in the GitHub secret, matching the local-dev pattern in
+      # Config/Local.xcconfig.example.
+      - name: Write CI-only signing config
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: echo "DEVELOPMENT_TEAM = ${DEVELOPMENT_TEAM}" > Config/Local.xcconfig
+
+      # A device-generic (not simulator) build, since simulator builds never need real
+      # signing at all — this is the actual App Store signing path, done here so it fails
+      # the RC rather than the eventual TestFlight promotion.
+      - name: xcodebuild TacosMind-iOS (signed)
+        env:
+          API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APPSTORE_API_ISSUER_ID }}
+        run: |
+          xcodebuild build \
+            -project TacosMind.xcodeproj \
+            -scheme TacosMind-iOS \
+            -destination 'generic/platform=iOS' \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8" \
+            -authenticationKeyID "$API_KEY_ID" \
+            -authenticationKeyIssuerID "$API_ISSUER_ID" \
+            2>&1
+
+      - name: Clean up signing keychain and API key
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -rf ~/.appstoreconnect
+
       - name: Extract RC Version
         id: version
         run: |

@@ -1,5 +1,8 @@
-// Checked in. DEVELOPMENT_TEAM defaults to empty so a fresh clone (and CI, which builds
-// with CODE_SIGNING_ALLOWED=NO anyway) never needs a real team id. #include? is optional —
-// it silently no-ops when Local.xcconfig doesn't exist. See Local.xcconfig.example.
+// Checked in. DEVELOPMENT_TEAM defaults to empty so a fresh clone never needs a real
+// team id — most CI builds use CODE_SIGNING_ALLOWED=NO and don't need one either; the
+// signed RC/TestFlight builds write a real value into Local.xcconfig at build time from
+// a secret (see release.yml/promote-testflight.yml), same mechanism as local dev.
+// #include? is optional — it silently no-ops when Local.xcconfig doesn't exist.
+// See Local.xcconfig.example.
 DEVELOPMENT_TEAM =
 #include? "Local.xcconfig"
