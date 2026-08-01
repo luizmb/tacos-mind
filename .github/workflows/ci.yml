@@ -31,12 +31,16 @@ jobs:
           defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
           defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
 
+      # CODE_SIGNING_ALLOWED=NO: this runner has no "Mac Development"/"Apple Development"
+      # certificate for the project's team ID, and CI only needs to confirm the code
+      # builds, not produce a signed artifact.
       - name: xcodebuild TacosMind-macOS
         run: |
           xcodebuild build \
             -project TacosMind.xcodeproj \
             -scheme TacosMind-macOS \
             -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
             2>&1
 
       - name: xcodebuild TacosMind-iOS
@@ -45,6 +49,7 @@ jobs:
             -project TacosMind.xcodeproj \
             -scheme TacosMind-iOS \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+            CODE_SIGNING_ALLOWED=NO \
             2>&1
 
   # Scoped to `swift build --target Meow` only, deliberately NOT `swift test` (even

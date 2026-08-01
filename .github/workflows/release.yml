@@ -37,12 +37,14 @@ jobs:
           defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
           defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
 
+      # See ci.yml's identical step for why CODE_SIGNING_ALLOWED=NO is needed.
       - name: xcodebuild TacosMind-macOS
         run: |
           xcodebuild build \
             -project TacosMind.xcodeproj \
             -scheme TacosMind-macOS \
             -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
             2>&1
 
       - name: xcodebuild TacosMind-iOS
@@ -51,6 +53,7 @@ jobs:
             -project TacosMind.xcodeproj \
             -scheme TacosMind-iOS \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
+            CODE_SIGNING_ALLOWED=NO \
             2>&1
 
       - name: Extract RC Version
