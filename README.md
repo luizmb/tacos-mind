@@ -49,8 +49,10 @@ Versioning lives in git refs, not a file — mirrors the process used by
 3. **Promote RC** (`workflow_dispatch`, `promote-rc.yml`) — once the RC build is green, tags
    the release branch `vX.Y.Z` and pushes the tag.
 4. The tag push triggers the promote phase (`release.yml`): a GitHub Release is created with
-   a changelog, and a Linux-built `Meow` binary is attached as a release asset — this is
-   what `ios.lu`'s own publish workflow downloads to build the site.
+   a changelog, and two `Meow` binaries are attached as release assets — `Meow-linux-x86_64`
+   (what `ios.lu`'s own publish workflow downloads to build the site) and
+   `Meow-macos-universal` (arm64 + x86_64, for running `Meow` locally on either kind of Mac
+   without building from source).
 
 ## Layout
 
