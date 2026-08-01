@@ -15,10 +15,16 @@ jobs:
     name: Create release/${{ inputs.version }}
     runs-on: ubuntu-latest
     steps:
+      # A push authenticated with the default GITHUB_TOKEN does not trigger other
+      # workflow runs (GitHub's anti-recursion rule) — the release/* branch pushed
+      # below would silently never kick off release.yml's RC build. PAT_TOKEN (a
+      # fine-grained PAT scoped to this repo, Contents: read/write) sidesteps that,
+      # same as luizmb/FP's create-rc.yml.
       - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Validate version format
         run: |
