@@ -22,6 +22,15 @@ jobs:
       - name: swift test
         run: swift test 2>&1
 
+      # xcodebuild in a non-interactive CI runner has no one to click "Trust & Enable" on
+      # the SPM macro plugins (SwiftRexMacros, FPMacrosPlugin) this project depends on —
+      # confirmed on this exact PR: "Macro ... must be enabled before it can be used".
+      # These defaults are the standard headless-CI workaround.
+      - name: Trust SPM macro plugins for headless xcodebuild
+        run: |
+          defaults write com.apple.dt.Xcode IDESkipPackagePluginFingerprintValidatation -bool YES
+          defaults write com.apple.dt.Xcode IDESkipMacroFingerprintValidation -bool YES
+
       - name: xcodebuild TacosMind-macOS
         run: |
           xcodebuild build \
@@ -38,14 +47,16 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro Max' \
             2>&1
 
-  # Scoped deliberately to Meow/GeneratorCore only — the rest of this package
-  # (AppCore, ArticleEditorFeature, AIChatFeature, ...) imports SwiftUI/AppKit/UIKit
-  # unconditionally and has no business being asked to build on Linux at all. A bare
-  # `swift build`/`swift test` here would attempt the whole package; explicit
-  # `--target`/`--filter` avoids depending on whatever makes that not immediately
-  # fail (unconfirmed — see the import PR description).
+  # Scoped to `swift build --target Meow` only, deliberately NOT `swift test` (even
+  # filtered) — confirmed on this exact PR that `swift test --filter GeneratorCoreTests`
+  # still fails, because `swift test` always resolves/compiles the WHOLE package before
+  # test discovery/filtering ever runs, and `FileWatching` unconditionally uses
+  # `DispatchSourceFileSystemObject`/`O_EVTONLY` (Apple Dispatch APIs, no Linux
+  # equivalent). `--target` on `swift build` is the only form that actually stays scoped.
+  # GeneratorCoreTests itself still runs — on the macOS job above, via the unscoped
+  # `swift test`.
   test-linux:
-    name: Build & Test Meow (Linux)
+    name: Build Meow (Linux)
     runs-on: ubuntu-latest
     container: swift:6.3
     steps:
@@ -53,6 +64,3 @@ jobs:
 
       - name: Build Meow
         run: swift build --target Meow 2>&1
-
-      - name: Test GeneratorCore
-        run: swift test --filter GeneratorCoreTests 2>&1
