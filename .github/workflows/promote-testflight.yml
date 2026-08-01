@@ -29,10 +29,16 @@ jobs:
             exit 1
           fi
 
+      # An unauthenticated `git ls-remote` against the HTTPS URL only works by accident
+      # on a public repo — on private repos it can't see any refs at all and always
+      # reports "not found" regardless of reality. `gh api` (already the pattern
+      # promote-rc.yml's "Verify RC build succeeded" step uses) works on both.
       - name: Verify tag exists
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG="v${{ inputs.version }}"
-          if ! git ls-remote --exit-code --tags "https://github.com/${{ github.repository }}.git" "refs/tags/$TAG" > /dev/null 2>&1; then
+          if ! gh api "repos/${{ github.repository }}/git/refs/tags/$TAG" > /dev/null 2>&1; then
             echo "::error::Tag $TAG not found — run 'Promote RC to Release' first"
             exit 1
           fi
