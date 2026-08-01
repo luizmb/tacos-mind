@@ -65,9 +65,22 @@ public struct World: Sendable {
     public var startListening: @Sendable () -> Publisher<TranscriptUpdate, SpeechError>
 
     /// Loads persisted GitHub sync settings, if any were ever saved — `nil` on first
-    /// launch. Infallible: a corrupt/missing store just reads as "not configured yet."
+    /// launch, or after `unlinkRepository`. Infallible: a corrupt/missing store just
+    /// reads as "not configured yet."
     public var loadGitHubSettings: @Sendable () -> Publisher<GitHubSettings?, Never>
-    public var saveGitHubSettings: @Sendable (GitHubSettings) -> Publisher<Void, GitHubError>
+    /// Only called from the one-time link setup — verifies `settings` (repo access +
+    /// token validity) via a live API call before persisting anything. Only `branch` can
+    /// be changed after this via `updateBranch`; changing `repoURL`/`token` means
+    /// `unlinkRepository` then linking again.
+    public var linkRepository: @Sendable (GitHubSettings) -> Publisher<Void, GitHubError>
+    /// The only mutation allowed on an already-linked repo — leaves `repoURL`/token alone.
+    public var updateBranch: @Sendable (String) -> Publisher<Void, GitHubError>
+    /// Clears the linked repo entirely: `repoURL`/`branch` and the Keychain token. Local
+    /// articles are untouched — this only forgets where they sync to.
+    public var unlinkRepository: @Sendable () -> Publisher<Void, GitHubError>
+    /// Whether `articlesDirectory()` currently has zero `.json` files — decides what a
+    /// freshly-linked repo's first sync does (see `GitHubSyncFeature.firstSyncDecided`).
+    public var isArticlesDirEmpty: @Sendable () -> Publisher<Bool, Never>
     /// Computes what a pull *would* do — nothing is written to disk yet. Carries the
     /// already-downloaded bytes so a subsequent `applyPull` never re-fetches.
     public var previewPull: @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError>
@@ -76,6 +89,10 @@ public struct World: Sendable {
     public var applyPull: @Sendable (PullPreview) -> Publisher<Int, GitHubError>
     /// Diffs every local article against the configured branch and, if any differ,
     /// commits all of them as one atomic commit (Git Data API: blob/tree/commit/ref).
+    /// Filename collisions overwrite the remote file with the local one; local files with
+    /// no remote counterpart yet are added. Remote-only files are left alone, never
+    /// deleted — also what a freshly-linked repo's first sync uses to push a non-empty
+    /// local `Articles/` up, rather than destructively pulling remote over it.
     public var commitLocalChanges: @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError>
     /// Opens a pull request from the configured branch to the repo's default branch —
     /// or, if one's already open for that branch, just returns its URL instead of
@@ -105,7 +122,10 @@ public struct World: Sendable {
         speak: @escaping @Sendable (String) -> Publisher<Void, SpeechError>,
         startListening: @escaping @Sendable () -> Publisher<TranscriptUpdate, SpeechError>,
         loadGitHubSettings: @escaping @Sendable () -> Publisher<GitHubSettings?, Never>,
-        saveGitHubSettings: @escaping @Sendable (GitHubSettings) -> Publisher<Void, GitHubError>,
+        linkRepository: @escaping @Sendable (GitHubSettings) -> Publisher<Void, GitHubError>,
+        updateBranch: @escaping @Sendable (String) -> Publisher<Void, GitHubError>,
+        unlinkRepository: @escaping @Sendable () -> Publisher<Void, GitHubError>,
+        isArticlesDirEmpty: @escaping @Sendable () -> Publisher<Bool, Never>,
         previewPull: @escaping @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError>,
         applyPull: @escaping @Sendable (PullPreview) -> Publisher<Int, GitHubError>,
         commitLocalChanges: @escaping @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError>,
@@ -133,7 +153,10 @@ public struct World: Sendable {
         self.speak = speak
         self.startListening = startListening
         self.loadGitHubSettings = loadGitHubSettings
-        self.saveGitHubSettings = saveGitHubSettings
+        self.linkRepository = linkRepository
+        self.updateBranch = updateBranch
+        self.unlinkRepository = unlinkRepository
+        self.isArticlesDirEmpty = isArticlesDirEmpty
         self.previewPull = previewPull
         self.applyPull = applyPull
         self.commitLocalChanges = commitLocalChanges

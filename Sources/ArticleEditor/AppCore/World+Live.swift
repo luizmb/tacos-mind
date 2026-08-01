@@ -38,17 +38,6 @@ extension World {
         let articlesDir = root.appendingPathComponent("Articles")
         let distDir = root.appendingPathComponent("dist")
 
-        // Non-secret GitHub sync settings (repo URL, branch) — a plain JSON file, same
-        // convention as PookiePayslip's AppSettings.swift. The token itself never lands
-        // here — see GitHubTokenKeychain.
-        let appSupportDir = (try? FileManager.default.url(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        )) ?? FileManager.default.temporaryDirectory
-        let githubSettingsFile = appSupportDir.appendingPathComponent("github-sync-settings.json")
-
         let jsonDecoder = JSONDecoder()
         let jsonEncoder = JSONEncoder()
         // Pretty-printed and key-sorted, not the default compact/unsorted output — these
@@ -557,29 +546,54 @@ extension World {
             loadGitHubSettings: {
                 Publisher { continuation in
                     guard
-                        let token = GitHubTokenKeychain.load(),
-                        let data = try? Data(contentsOf: githubSettingsFile),
-                        let nonSecret = try? JSONDecoder().decode(GitHubNonSecretSettings.self, from: data)
+                        let repoURL = UserDefaults.standard.string(forKey: GitHubDefaultsKey.repoURL),
+                        let branch = UserDefaults.standard.string(forKey: GitHubDefaultsKey.branch),
+                        let token = GitHubTokenKeychain.load()
                     else {
                         continuation.yield(nil)
                         return
                     }
-                    continuation.yield(GitHubSettings(repoURL: nonSecret.repoURL, branch: nonSecret.branch, token: token))
+                    continuation.yield(GitHubSettings(repoURL: repoURL, branch: branch, token: token))
                 }
             },
-            saveGitHubSettings: { settings in
+            // Only called once, from the link setup screen — verifies the repo/token are
+            // actually valid (a live API call) before persisting anything, so a typo'd
+            // repo or token surfaces immediately rather than on the first pull/commit.
+            linkRepository: { settings in
                 Publisher { continuation throws(GitHubError) in
+                    guard let repo = settings.repository else { throw .invalidRepoURL }
+                    _ = try await GitHubClient.repoInfo(settings, repo: repo)
                     if case .failure(let error) = GitHubTokenKeychain.save(settings.token) {
                         throw error
                     }
-                    let nonSecret = GitHubNonSecretSettings(repoURL: settings.repoURL, branch: settings.branch)
-                    do {
-                        let data = try JSONEncoder().encode(nonSecret)
-                        try data.write(to: githubSettingsFile, options: .atomic)
-                    } catch {
-                        throw .network(error.localizedDescription)
-                    }
+                    UserDefaults.standard.set(settings.repoURL, forKey: GitHubDefaultsKey.repoURL)
+                    UserDefaults.standard.set(settings.branch, forKey: GitHubDefaultsKey.branch)
                     continuation.yield(())
+                }
+            },
+            // The only field mutable on an already-linked repo — repoURL/token are
+            // untouched here, on purpose (see World.updateBranch's doc comment).
+            updateBranch: { branch in
+                Publisher { continuation throws(GitHubError) in
+                    UserDefaults.standard.set(branch, forKey: GitHubDefaultsKey.branch)
+                    continuation.yield(())
+                }
+            },
+            unlinkRepository: {
+                Publisher { continuation throws(GitHubError) in
+                    if case .failure(let error) = GitHubTokenKeychain.delete() {
+                        throw error
+                    }
+                    UserDefaults.standard.removeObject(forKey: GitHubDefaultsKey.repoURL)
+                    UserDefaults.standard.removeObject(forKey: GitHubDefaultsKey.branch)
+                    continuation.yield(())
+                }
+            },
+            isArticlesDirEmpty: {
+                Publisher { continuation in
+                    let count = (try? FileManager.default.contentsOfDirectory(at: articlesDir, includingPropertiesForKeys: nil)
+                        .filter { $0.pathExtension == "json" }.count) ?? 0
+                    continuation.yield(count == 0)
                 }
             },
             previewPull: { settings in
@@ -711,9 +725,12 @@ extension World {
     }()
 }
 
-private struct GitHubNonSecretSettings: Codable {
-    let repoURL: String
-    let branch: String
+/// Non-secret GitHub sync settings (repo URL, branch) — UserDefaults, same convention
+/// PookiePayslip's AppSettings.swift uses. The token itself never lands here, only in
+/// GitHubTokenKeychain — see World.linkRepository/updateBranch/unlinkRepository.
+private enum GitHubDefaultsKey {
+    static let repoURL = "io.lu.ArticleEditor.github.repoURL"
+    static let branch = "io.lu.ArticleEditor.github.branch"
 }
 
 private func sha256Hex(of data: Data) -> String {

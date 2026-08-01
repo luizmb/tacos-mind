@@ -5,10 +5,8 @@ public struct GitHubSyncContent: View {
     @Environment(\.dismiss) private var dismiss
 
     let isConfigured: Bool
-    let repoURLInput: Binding<String>
-    let branchInput: Binding<String>
-    let tokenInput: Binding<String>
-    let isSavingSettings: Bool
+    let repoURL: String
+    let branch: String
     let isPulling: Bool
     let pendingPullPreview: PullPreview?
     let isCommitting: Bool
@@ -17,16 +15,27 @@ public struct GitHubSyncContent: View {
     let lastPRURL: URL?
     let lastError: String?
     let isConfirmingPull: Binding<Bool>
-    let onSaveSettings: () -> Void
+    let onRequestLink: () -> Void
+    let onRequestUnlink: () -> Void
+    let onRequestEditBranch: () -> Void
     let onPull: () -> Void
     let onConfirmPull: () -> Void
     let onCommit: () -> Void
     let onOpenPR: () -> Void
 
+    let isConfirmingUnlink: Binding<Bool>
+    let isUnlinking: Bool
+    let onConfirmUnlink: () -> Void
+
+    let linkSheet: LinkRepositoryContent
+    let isLinkPresented: Binding<Bool>
+    let editBranchSheet: EditBranchContent
+    let isEditingBranch: Binding<Bool>
+
     public var body: some View {
         NavigationStack {
             Form {
-                settingsSection
+                repositorySection
                 actionsSection
                 if let lastError {
                     Section {
@@ -42,6 +51,18 @@ public struct GitHubSyncContent: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .sheet(isPresented: isLinkPresented) { linkSheet }
+            .sheet(isPresented: isEditingBranch) { editBranchSheet }
+            .confirmationDialog(
+                "Unlink this repository?",
+                isPresented: isConfirmingUnlink,
+                titleVisibility: .visible
+            ) {
+                Button("Unlink", role: .destructive, action: onConfirmUnlink)
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Local articles are kept — you'll just need to link again to sync them.")
             }
             .confirmationDialog(
                 "This will overwrite local changes",
@@ -61,37 +82,22 @@ public struct GitHubSyncContent: View {
         }
     }
 
-    private var settingsSection: some View {
-        Section("Settings") {
-            TextField("Repo URL", text: repoURLInput)
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                #endif
-                .autocorrectionDisabled()
-            TextField("Branch", text: branchInput)
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                #endif
-                .autocorrectionDisabled()
-            // The field is never pre-filled with the stored secret (see
-            // `GitHubSyncFeature.settingsLoaded`) — once a token is saved, leaving this
-            // blank on the next Save keeps it unchanged; only typing a new value rotates it.
-            SecureField(isConfigured ? "Leave blank to keep the current token" : "Personal Access Token", text: tokenInput)
-            if isConfigured {
-                Text("A token is already saved.")
-                    .font(.footnote)
+    @ViewBuilder
+    private var repositorySection: some View {
+        if isConfigured {
+            Section("Repository") {
+                LabeledContent("Repo", value: repoURL)
+                LabeledContent("Branch", value: branch)
+                Button("Edit Branch", action: onRequestEditBranch)
+                Button("Unlink", role: .destructive, action: onRequestUnlink)
+                    .disabled(isUnlinking)
+            }
+        } else {
+            Section("Repository") {
+                Text("Not linked to a GitHub repository yet.")
                     .foregroundStyle(.secondary)
+                Button("Link Repository", action: onRequestLink)
             }
-            Button {
-                onSaveSettings()
-            } label: {
-                if isSavingSettings {
-                    ProgressView()
-                } else {
-                    Text("Save")
-                }
-            }
-            .disabled(isSavingSettings)
         }
     }
 

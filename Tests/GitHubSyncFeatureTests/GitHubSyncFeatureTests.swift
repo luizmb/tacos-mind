@@ -15,7 +15,10 @@ struct GitHubSyncFeatureTests {
     private func makeStore(
         initial: GitHubSyncFeature.State = .init(),
         loadGitHubSettings: @escaping @Sendable () -> Publisher<GitHubSettings?, Never> = { .just(nil) },
-        saveGitHubSettings: @escaping @Sendable (GitHubSettings) -> Publisher<Void, GitHubError> = { _ in .just(()) },
+        linkRepository: @escaping @Sendable (GitHubSettings) -> Publisher<Void, GitHubError> = { _ in .just(()) },
+        updateBranch: @escaping @Sendable (String) -> Publisher<Void, GitHubError> = { _ in .just(()) },
+        unlinkRepository: @escaping @Sendable () -> Publisher<Void, GitHubError> = { .just(()) },
+        isArticlesDirEmpty: @escaping @Sendable () -> Publisher<Bool, Never> = { .just(true) },
         previewPull: @escaping @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError> = { _ in
             .just(PullPreview(toAdd: [], toUpdate: [], localOnlyChanges: []))
         },
@@ -32,7 +35,10 @@ struct GitHubSyncFeatureTests {
             behavior: GitHubSyncFeature.behavior(),
             environment: GitHubSyncFeature.Environment(
                 loadGitHubSettings: loadGitHubSettings,
-                saveGitHubSettings: saveGitHubSettings,
+                linkRepository: linkRepository,
+                updateBranch: updateBranch,
+                unlinkRepository: unlinkRepository,
+                isArticlesDirEmpty: isArticlesDirEmpty,
                 previewPull: previewPull,
                 applyPull: applyPull,
                 commitLocalChanges: commitLocalChanges,
@@ -176,7 +182,7 @@ struct GitHubSyncFeatureTests {
         }
     }
 
-    @Test("commit/pull/openPR are no-ops when not configured yet")
+    @Test("commit/pull/openPR are no-ops when not linked yet")
     func actionsNoOpWithoutSettings() async throws {
         let store = makeStore()
         store.dispatch(.commit) { $0.lastError = GitHubError.notConfigured.readableDescription }
@@ -201,84 +207,288 @@ struct GitHubSyncFeatureTests {
         }
     }
 
-    @Test("saveSettings persists the form fields and updates settings on success")
-    func saveSettingsSucceeds() async throws {
-        let store = makeStore(saveGitHubSettings: { _ in .just(()) })
-
-        store.dispatch(.setRepoURLInput(settings.repoURL)) { $0.repoURLInput = settings.repoURL }
-        store.dispatch(.setBranchInput(settings.branch)) { $0.branchInput = settings.branch }
-        store.dispatch(.setTokenInput(settings.token)) { $0.tokenInput = settings.token }
-        store.dispatch(.saveSettings) { state in
-            state.isSavingSettings = true
-            state.lastError = nil
-        }
-
-        await store.runEffects()
-
-        store.receive(GitHubSyncFeature.Action.prism.settingsSaved) { result, state in
-            guard case .success = result else {
-                Issue.record("expected settingsSaved(.success)")
-                return
-            }
-            state.isSavingSettings = false
-            state.settings = settings
-            // The token field is cleared after a successful save — it's a secret, never
-            // left sitting in a visible field once it's safely stored.
-            state.tokenInput = ""
-        }
-    }
-
-    /// Test-only spy — exercised serially within a single `@MainActor` test function, so
-    /// the lack of real synchronization is safe despite `@unchecked Sendable`.
-    private final class SettingsRecorder: @unchecked Sendable {
-        private(set) var saved: [GitHubSettings] = []
-        func record(_ settings: GitHubSettings) { saved.append(settings) }
-    }
-
-    @Test("saving with a blank token keeps the previously-stored token, doesn't erase it")
-    func saveSettingsWithBlankTokenKeepsExistingToken() async throws {
-        let recorder = SettingsRecorder()
-        let store = makeStore(saveGitHubSettings: { settings in
-            recorder.record(settings)
-            return .just(())
-        })
-
-        store.dispatch(.setRepoURLInput(settings.repoURL)) { $0.repoURLInput = settings.repoURL }
-        store.dispatch(.setBranchInput(settings.branch)) { $0.branchInput = settings.branch }
-        store.dispatch(.setTokenInput(settings.token)) { $0.tokenInput = settings.token }
-        store.dispatch(.saveSettings) { state in
-            state.isSavingSettings = true
-            state.lastError = nil
-        }
-        await store.runEffects()
-        store.receive(GitHubSyncFeature.Action.prism.settingsSaved) { _, state in
-            state.isSavingSettings = false
-            state.settings = settings
-            state.tokenInput = ""
-        }
-
-        // Editing just the branch and saving again, with the token field left blank,
-        // must reuse the already-stored token rather than overwriting it with "".
-        let updatedBranch = "\(settings.branch)-updated"
-        store.dispatch(.setBranchInput(updatedBranch)) { $0.branchInput = updatedBranch }
-        store.dispatch(.saveSettings) { state in
-            state.isSavingSettings = true
-            state.lastError = nil
-        }
-        await store.runEffects()
-        store.receive(GitHubSyncFeature.Action.prism.settingsSaved) { _, state in
-            state.isSavingSettings = false
-            state.settings = GitHubSettings(repoURL: settings.repoURL, branch: updatedBranch, token: settings.token)
-        }
-
-        #expect(recorder.saved.last?.token == settings.token)
-        #expect(recorder.saved.last?.branch == updatedBranch)
-    }
-
     @Test("setPresented toggles the sheet's store-backed presentation flag")
     func setPresentedTogglesFlag() async throws {
         let store = makeStore()
         store.dispatch(.setPresented(true)) { $0.isPresented = true }
         store.dispatch(.setPresented(false)) { $0.isPresented = false }
+    }
+
+    // MARK: - Link flow
+
+    @Test("requestLink opens the modal with a blank form defaulting to branch main")
+    func requestLinkOpensModal() async throws {
+        let store = makeStore()
+        store.dispatch(.requestLink) { state in
+            state.isLinkPresented = true
+            state.linkRepoInput = ""
+            state.linkBranchInput = "main"
+            state.linkTokenInput = ""
+            state.linkError = nil
+        }
+    }
+
+    @Test("cancelLink closes the modal without linking anything")
+    func cancelLinkClosesModal() async throws {
+        var initial = GitHubSyncFeature.State()
+        initial.isLinkPresented = true
+        let store = makeStore(initial: initial)
+        store.dispatch(.cancelLink) { $0.isLinkPresented = false }
+    }
+
+    @Test("confirmLink with a blank field shows an error and does nothing else")
+    func confirmLinkRequiresAllFields() async throws {
+        var initial = GitHubSyncFeature.State()
+        initial.linkRepoInput = settings.repoURL
+        initial.linkBranchInput = ""
+        initial.linkTokenInput = settings.token
+        let store = makeStore(initial: initial)
+
+        store.dispatch(.confirmLink) { $0.linkError = "Fill in the repo, branch, and token." }
+    }
+
+    @Test("confirmLink failure surfaces the error and leaves the modal open")
+    func confirmLinkFailureKeepsModalOpen() async throws {
+        var initial = GitHubSyncFeature.State()
+        initial.isLinkPresented = true
+        initial.linkRepoInput = settings.repoURL
+        initial.linkBranchInput = settings.branch
+        initial.linkTokenInput = settings.token
+        let store = makeStore(initial: initial, linkRepository: { _ in .fail(.badStatus(401)) })
+
+        store.dispatch(.confirmLink) { state in
+            state.isLinking = true
+            state.linkError = nil
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.linked) { result, state in
+            guard case .failure(let error) = result else {
+                Issue.record("expected linked(.failure)")
+                return
+            }
+            state.isLinking = false
+            state.linkError = error.readableDescription
+        }
+        // isLinkPresented stays true — TestStore's exhaustive check confirms nothing
+        // else (like closing the modal) happened on failure.
+    }
+
+    @Test("confirmLink success on an empty Articles dir pulls remote content down")
+    func confirmLinkSuccessEmptyDirPulls() async throws {
+        var initial = GitHubSyncFeature.State()
+        initial.isLinkPresented = true
+        initial.linkRepoInput = settings.repoURL
+        initial.linkBranchInput = settings.branch
+        initial.linkTokenInput = settings.token
+
+        let preview = PullPreview(
+            toAdd: [PullPreview.FileChange(name: "a.json", content: Data("a".utf8))],
+            toUpdate: [],
+            localOnlyChanges: []
+        )
+        let store = makeStore(
+            initial: initial,
+            linkRepository: { _ in .just(()) },
+            isArticlesDirEmpty: { .just(true) },
+            previewPull: { _ in .just(preview) },
+            applyPull: { _ in .just(1) }
+        )
+
+        store.dispatch(.confirmLink) { state in
+            state.isLinking = true
+            state.linkError = nil
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.linked) { _, state in
+            state.settings = settings
+            state.isLinking = false
+            state.isLinkPresented = false
+            state.linkRepoInput = ""
+            state.linkBranchInput = ""
+            state.linkTokenInput = ""
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.firstSyncDecided) { _, state in
+            state.isPulling = true
+            state.lastError = nil
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.pullPreviewed) { _, state in
+            state.pendingPullPreview = nil
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.pullApplied) { _, state in
+            state.isPulling = false
+        }
+    }
+
+    @Test("confirmLink success on a non-empty Articles dir pushes local content up instead")
+    func confirmLinkSuccessNonEmptyDirPushes() async throws {
+        var initial = GitHubSyncFeature.State()
+        initial.isLinkPresented = true
+        initial.linkRepoInput = settings.repoURL
+        initial.linkBranchInput = settings.branch
+        initial.linkTokenInput = settings.token
+
+        let outcome = CommitOutcome.committed(files: ["local.json"], commitURL: URL(string: "https://github.com/x/y/commit/1")!)
+        let store = makeStore(
+            initial: initial,
+            linkRepository: { _ in .just(()) },
+            isArticlesDirEmpty: { .just(false) },
+            commitLocalChanges: { _ in .just(outcome) }
+        )
+
+        store.dispatch(.confirmLink) { state in
+            state.isLinking = true
+            state.linkError = nil
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.linked) { _, state in
+            state.settings = settings
+            state.isLinking = false
+            state.isLinkPresented = false
+            state.linkRepoInput = ""
+            state.linkBranchInput = ""
+            state.linkTokenInput = ""
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.firstSyncDecided) { _, state in
+            state.isCommitting = true
+            state.lastError = nil
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.committed) { _, state in
+            state.isCommitting = false
+            state.lastCommitOutcome = outcome
+        }
+    }
+
+    // MARK: - Unlink flow
+
+    @Test("requestUnlink/cancelUnlink toggle the confirmation without unlinking")
+    func requestAndCancelUnlink() async throws {
+        let store = makeStore(initial: configured())
+        store.dispatch(.requestUnlink) { $0.isConfirmingUnlink = true }
+        store.dispatch(.cancelUnlink) { $0.isConfirmingUnlink = false }
+    }
+
+    @Test("confirmUnlink clears settings and any leftover sync state")
+    func confirmUnlinkClearsSettings() async throws {
+        var initial = configured()
+        initial.isConfirmingUnlink = true
+        initial.lastCommitOutcome = .nothingToCommit
+        initial.lastPRURL = URL(string: "https://github.com/x/y/pull/1")!
+        let store = makeStore(initial: initial, unlinkRepository: { .just(()) })
+
+        store.dispatch(.confirmUnlink) { state in
+            state.isConfirmingUnlink = false
+            state.isUnlinking = true
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.unlinked) { _, state in
+            state.isUnlinking = false
+            state.settings = nil
+            state.lastCommitOutcome = nil
+            state.lastPRURL = nil
+            state.pendingPullPreview = nil
+        }
+    }
+
+    @Test("confirmUnlink failure surfaces the error and keeps settings linked")
+    func confirmUnlinkFailureKeepsSettings() async throws {
+        var initial = configured()
+        initial.isConfirmingUnlink = true
+        let store = makeStore(initial: initial, unlinkRepository: { .fail(.network("boom")) })
+
+        store.dispatch(.confirmUnlink) { state in
+            state.isConfirmingUnlink = false
+            state.isUnlinking = true
+        }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.unlinked) { result, state in
+            guard case .failure(let error) = result else {
+                Issue.record("expected unlinked(.failure)")
+                return
+            }
+            state.isUnlinking = false
+            state.lastError = error.readableDescription
+        }
+        // settings stays set — TestStore's exhaustive check confirms nothing else changed.
+    }
+
+    // MARK: - Edit branch flow
+
+    @Test("requestEditBranch seeds the form with the current branch")
+    func requestEditBranchSeedsForm() async throws {
+        let store = makeStore(initial: configured())
+        store.dispatch(.requestEditBranch) { state in
+            state.isEditingBranch = true
+            state.editBranchInput = settings.branch
+        }
+    }
+
+    @Test("requestEditBranch is a no-op when not linked yet")
+    func requestEditBranchNoOpWithoutSettings() async throws {
+        let store = makeStore()
+        store.dispatch(.requestEditBranch) { _ in }
+    }
+
+    @Test("confirmEditBranch updates the stored branch and closes the modal")
+    func confirmEditBranchSucceeds() async throws {
+        var initial = configured()
+        initial.isEditingBranch = true
+        initial.editBranchInput = "main"
+        let store = makeStore(initial: initial, updateBranch: { _ in .just(()) })
+
+        store.dispatch(.confirmEditBranch) { $0.isSavingBranch = true }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.branchUpdated) { _, state in
+            state.isSavingBranch = false
+            state.isEditingBranch = false
+            state.settings?.branch = "main"
+        }
+    }
+
+    @Test("confirmEditBranch failure surfaces the error and keeps the modal open")
+    func confirmEditBranchFailureKeepsModalOpen() async throws {
+        var initial = configured()
+        initial.isEditingBranch = true
+        initial.editBranchInput = "main"
+        let store = makeStore(initial: initial, updateBranch: { _ in .fail(.network("boom")) })
+
+        store.dispatch(.confirmEditBranch) { $0.isSavingBranch = true }
+
+        await store.runEffects()
+
+        store.receive(GitHubSyncFeature.Action.prism.branchUpdated) { result, state in
+            guard case .failure(let error) = result else {
+                Issue.record("expected branchUpdated(.failure)")
+                return
+            }
+            state.isSavingBranch = false
+            state.lastError = error.readableDescription
+        }
     }
 }
