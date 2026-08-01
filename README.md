@@ -45,7 +45,10 @@ Versioning lives in git refs, not a file — mirrors the process used by
 1. **Create RC** (`workflow_dispatch`, `create-rc.yml`) — bumps `MARKETING_VERSION`/
    `CURRENT_PROJECT_VERSION` in `TacosMind.xcodeproj`, commits to `main`, creates and
    pushes a `release/X.Y.Z` branch.
-2. That branch push triggers the RC build (`release.yml`): both Xcode schemes + `swift test`.
+2. That branch push triggers the RC build (`release.yml`): both Xcode schemes + `swift test`,
+   including a *real* signed `TacosMind-iOS` build (real distribution cert + team ID +
+   App Store Connect API key, all from secrets, none committed) — so a signing problem
+   fails the RC, not the eventual TestFlight upload.
 3. **Promote RC** (`workflow_dispatch`, `promote-rc.yml`) — once the RC build is green, tags
    the release branch `vX.Y.Z` and pushes the tag.
 4. The tag push triggers the promote phase (`release.yml`): a GitHub Release is created with
@@ -53,6 +56,16 @@ Versioning lives in git refs, not a file — mirrors the process used by
    (what `ios.lu`'s own publish workflow downloads to build the site) and
    `Meow-macos-universal` (arm64 + x86_64, for running `Meow` locally on either kind of Mac
    without building from source).
+5. **Promote to TestFlight** (`workflow_dispatch`, `promote-testflight.yml`, separate and
+   manual — it doesn't auto-chain off the tag push) — archives, signs, and uploads the
+   already-tagged version straight to App Store Connect in one `xcodebuild -exportArchive`
+   call (Xcode 13+ exports and uploads together when authenticated with the API key).
+
+Needs five repository secrets for the signed builds/TestFlight upload: `DEVELOPMENT_TEAM`,
+`APPSTORE_API_KEY_ID`, `APPSTORE_API_ISSUER_ID`, `APPSTORE_API_KEY_P8` (base64), and
+`DISTRIBUTION_CERTIFICATE_P12` (base64) + `DISTRIBUTION_CERTIFICATE_PASSWORD`. The
+distribution certificate is pinned (not left to `-allowProvisioningUpdates` to
+auto-create) since Apple caps active distribution certs per team.
 
 ## Layout
 
