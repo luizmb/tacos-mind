@@ -99,6 +99,16 @@ jobs:
       # A device-generic (not simulator) build, since simulator builds never need real
       # signing at all — this is the actual App Store signing path, done here so it fails
       # the RC rather than the eventual TestFlight promotion.
+      #
+      # CODE_SIGN_STYLE=Manual + an explicit named profile, not the pbxproj's default
+      # Automatic — confirmed the hard way (see promote-testflight.yml's identical
+      # reasoning): Automatic signing doesn't reliably find/create the right profile
+      # and, worse, silently created a fresh throwaway "Development" certificate on the
+      # Apple Developer account on every single run (nothing in this ephemeral runner's
+      # keychain to reuse, so -allowProvisioningUpdates minted a new one each time).
+      # Pinning to the actual distribution cert/profile avoids that entirely, and is
+      # also a more accurate RC check — it now tests the exact signing path TestFlight
+      # promotion actually uses, not a development one that was never representative.
       - name: xcodebuild TacosMind-iOS (signed)
         env:
           API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -112,6 +122,9 @@ jobs:
             -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8" \
             -authenticationKeyID "$API_KEY_ID" \
             -authenticationKeyIssuerID "$API_ISSUER_ID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="TacosMind AppStore Distribution" \
             2>&1
 
       - name: Clean up signing keychain and API key
