@@ -95,6 +95,18 @@ jobs:
       # app-store-connect, destination is upload, and the same API key authenticates the
       # export. No separate altool/notarytool call needed. exportOptions.plist is
       # generated here (not committed) since its only real content is the team ID.
+      #
+      # signingStyle is `manual` with an explicit named profile, not `automatic` —
+      # confirmed the hard way: automatic/"cloud managed" signing fails with "Cloud
+      # signing permission error" / "No profiles for '<bundle-id>' were found" even when
+      # a valid ACTIVE App Store profile genuinely exists for the bundle id (verified
+      # directly via the App Store Connect API). Automatic signing only recognizes
+      # profiles Xcode itself created and marked IsXcodeManaged — it won't use one that
+      # already exists otherwise, and apparently can't reliably create its own here
+      # either. Naming the profile explicitly sidesteps that flow: "TacosMind AppStore
+      # Distribution" was created once via a direct API call (see git history / PR
+      # description) and doesn't need to be recreated — profiles are long-lived
+      # (1-year expiry), this only needs redoing if it's ever deleted.
       - name: Archive and upload to TestFlight
         env:
           API_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
@@ -114,7 +126,12 @@ jobs:
               <key>destination</key>
               <string>upload</string>
               <key>signingStyle</key>
-              <string>automatic</string>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>lu.ios.tacos-mind</key>
+                  <string>TacosMind AppStore Distribution</string>
+              </dict>
           </dict>
           </plist>
           PLIST
