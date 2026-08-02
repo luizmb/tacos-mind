@@ -15,6 +15,10 @@ public enum GitHubSyncFeature {
         /// Whether the settings/actions sheet is showing — store state, not local
         /// SwiftUI `@State`, so `AppRootView` never owns a shadow copy of its own.
         public var isPresented: Bool
+        /// True while `firstSyncDecided`'s automatic pull/commit is in flight — lets
+        /// `pullApplied`/`committed` tell a first-link sync apart from a manual
+        /// Pull/Commit tap, since only the former should auto-close the sheet.
+        public var isPerformingFirstSync: Bool
         /// Non-nil ⇒ linked. Only one repo can be linked at a time; `branch` is the only
         /// field editable afterward (see `isEditingBranch`) — changing `repoURL`/`token`
         /// means unlinking and linking again.
@@ -48,6 +52,7 @@ public enum GitHubSyncFeature {
 
         public init() {
             isPresented = false
+            isPerformingFirstSync = false
             settings = nil
             isLinkPresented = false
             linkRepoInput = ""
@@ -335,12 +340,14 @@ public enum GitHubSyncFeature {
                 if isEmpty {
                     return .reduce { state in
                         state.isPulling = true
+                        state.isPerformingFirstSync = true
                         state.lastError = nil
                     }
                     .produce { ctx in ctx.environment.previewPull(settings).asEffect { Action.pullPreviewed($0) } }
                 } else {
                     return .reduce { state in
                         state.isCommitting = true
+                        state.isPerformingFirstSync = true
                         state.lastError = nil
                     }
                     .produce { ctx in ctx.environment.commitLocalChanges(settings).asEffect { Action.committed($0) } }
@@ -423,6 +430,7 @@ public enum GitHubSyncFeature {
                 guard preview.localOnlyChanges.isEmpty else {
                     return .reduce { state in
                         state.isPulling = false
+                        state.isPerformingFirstSync = false
                         state.pendingPullPreview = preview
                     }
                 }
@@ -432,6 +440,7 @@ public enum GitHubSyncFeature {
             case .pullPreviewed(.failure(let error)):
                 return .reduce { state in
                     state.isPulling = false
+                    state.isPerformingFirstSync = false
                     state.lastError = error.readableDescription
                 }
 
@@ -447,11 +456,18 @@ public enum GitHubSyncFeature {
                 }
 
             case .pullApplied(.success):
-                return .reduce { $0.isPulling = false }
+                return .reduce { state in
+                    state.isPulling = false
+                    if state.isPerformingFirstSync {
+                        state.isPerformingFirstSync = false
+                        state.isPresented = false
+                    }
+                }
 
             case .pullApplied(.failure(let error)):
                 return .reduce { state in
                     state.isPulling = false
+                    state.isPerformingFirstSync = false
                     state.lastError = error.readableDescription
                 }
 
@@ -469,11 +485,16 @@ public enum GitHubSyncFeature {
                 return .reduce { state in
                     state.isCommitting = false
                     state.lastCommitOutcome = outcome
+                    if state.isPerformingFirstSync {
+                        state.isPerformingFirstSync = false
+                        state.isPresented = false
+                    }
                 }
 
             case .committed(.failure(let error)):
                 return .reduce { state in
                     state.isCommitting = false
+                    state.isPerformingFirstSync = false
                     state.lastError = error.readableDescription
                 }
 
