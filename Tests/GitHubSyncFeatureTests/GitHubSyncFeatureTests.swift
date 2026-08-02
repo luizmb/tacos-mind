@@ -316,6 +316,7 @@ struct GitHubSyncFeatureTests {
 
         store.receive(GitHubSyncFeature.Action.prism.firstSyncDecided) { _, state in
             state.isPulling = true
+            state.isPerformingFirstSync = true
             state.lastError = nil
         }
 
@@ -329,6 +330,8 @@ struct GitHubSyncFeatureTests {
 
         store.receive(GitHubSyncFeature.Action.prism.pullApplied) { _, state in
             state.isPulling = false
+            state.isPerformingFirstSync = false
+            state.isPresented = false
         }
     }
 
@@ -368,6 +371,7 @@ struct GitHubSyncFeatureTests {
 
         store.receive(GitHubSyncFeature.Action.prism.firstSyncDecided) { _, state in
             state.isCommitting = true
+            state.isPerformingFirstSync = true
             state.lastError = nil
         }
 
@@ -376,6 +380,8 @@ struct GitHubSyncFeatureTests {
         store.receive(GitHubSyncFeature.Action.prism.committed) { _, state in
             state.isCommitting = false
             state.lastCommitOutcome = outcome
+            state.isPerformingFirstSync = false
+            state.isPresented = false
         }
     }
 

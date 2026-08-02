@@ -619,6 +619,14 @@ extension World {
             },
             applyPull: { preview in
                 Publisher { continuation throws(GitHubError) in
+                    // `Articles/` may not exist yet (a fresh install, or a repo being
+                    // linked for the first time) — this may be the first thing that
+                    // ever writes into it, same as `createArticle` above.
+                    do {
+                        try FileManager.default.createDirectory(at: articlesDir, withIntermediateDirectories: true)
+                    } catch {
+                        throw .network(error.localizedDescription)
+                    }
                     var count = 0
                     for change in preview.toAdd + preview.toUpdate {
                         let url = articlesDir.appendingPathComponent(change.name)
