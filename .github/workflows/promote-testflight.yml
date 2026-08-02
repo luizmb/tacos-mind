@@ -84,11 +84,22 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$API_KEY_P8" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${API_KEY_ID}.p8
 
-      # See release.yml's identical step (rc-test) — same gitignored-file convention.
+      # See release.yml's identical step (rc-test) — same gitignored-file convention,
+      # and same reason CODE_SIGN_STYLE/IDENTITY/PROVISIONING_PROFILE_SPECIFIER live
+      # here rather than as xcodebuild command-line overrides: `xcodebuild archive`
+      # (unlike -exportArchive below, which only re-signs an already-built archive)
+      # compiles the whole dependency graph, and a command-line override would apply to
+      # the SwiftPM macro plugin targets too, which don't have a team configured.
       - name: Write CI-only signing config
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
-        run: echo "DEVELOPMENT_TEAM = ${DEVELOPMENT_TEAM}" > Config/Local.xcconfig
+        run: |
+          cat > Config/Local.xcconfig <<EOF
+          DEVELOPMENT_TEAM = ${DEVELOPMENT_TEAM}
+          CODE_SIGN_STYLE = Manual
+          CODE_SIGN_IDENTITY = Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER = TacosMind AppStore Distribution
+          EOF
 
       # Archive, then export straight to App Store Connect in one step — Xcode 13+ does
       # the export AND upload together when the exportOptions method is
