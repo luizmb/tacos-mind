@@ -2,7 +2,18 @@
 // team id — most CI builds use CODE_SIGNING_ALLOWED=NO and don't need one either; the
 // signed RC/TestFlight builds write a real value into Local.xcconfig at build time from
 // a secret (see release.yml/promote-testflight.yml), same mechanism as local dev.
+//
+// CODE_SIGN_STYLE defaults to Automatic (the previous pbxproj-hardcoded value, moved
+// here so it stays a default rather than fixed — same reason DEVELOPMENT_TEAM lives
+// here and not directly in buildSettings: a direct pbxproj entry always wins over an
+// xcconfig value, so it has to live here for Local.xcconfig to be able to override it.
+// The signed RC/TestFlight builds override it to Manual + a named distribution profile
+// (see release.yml/promote-testflight.yml) — confirmed the hard way that leaving the
+// hardcoded Automatic in the pbxproj causes "conflicting provisioning settings" once a
+// provisioning profile is specified from the CI xcconfig.
+//
 // #include? is optional — it silently no-ops when Local.xcconfig doesn't exist.
 // See Local.xcconfig.example.
 DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
 #include? "Local.xcconfig"
