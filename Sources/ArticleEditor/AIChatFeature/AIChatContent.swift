@@ -2,8 +2,6 @@ import AppDomain
 import SwiftUI
 
 public struct AIChatContent: View {
-    @Environment(\.dismiss) private var dismiss
-
     let isAvailable: Bool
     let isListening: Bool
     let isResponding: Bool
@@ -17,6 +15,7 @@ public struct AIChatContent: View {
     let onToggleListening: () -> Void
     let onToggleMute: () -> Void
     let onSaveToNotes: () -> Void
+    let onClose: () -> Void
     let onConfirmCloseAndDiscard: () -> Void
     let onConfirmCloseAndSave: () -> Void
 
@@ -61,11 +60,11 @@ public struct AIChatContent: View {
             Text("Assistant")
                 .font(.headline)
             Spacer()
-            // `dismiss()` goes through the same `isChatOpen` binding the toolbar toggle
-            // uses, so it dispatches `.chat(.close)` — not a raw "hide the sheet" — which
-            // is what makes the unsaved-conversation confirmation dialog above still
-            // fire correctly instead of silently discarding an in-progress chat.
-            Button("Done") { dismiss() }
+            // Dispatches `.close` rather than SwiftUI's `dismiss()`. `dismiss()` hides
+            // the container directly, behind the store's back, so the "save this
+            // conversation?" gate below never got its chance — the panel just vanished
+            // with the conversation in it.
+            Button("Done", action: onClose)
             Button(action: onToggleMute) {
                 Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
             }

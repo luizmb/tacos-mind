@@ -13,12 +13,15 @@ public struct ArticleListContent: View {
     let onConfirmNewArticle: () -> Void
 
     public var body: some View {
+        // The setter deliberately ignores `nil`: clearing the highlight is not something
+        // the sidebar decides. It is derived from the navigation stack, so it clears when
+        // the editor is popped — a `List` that also cleared it locally would be a second
+        // writer racing the first.
         List(items, selection: Binding(
             get: { selectedSlug },
             set: { slug in
-                if let slug, let match = items.first(where: { $0.slug == slug }) {
-                    onSelect(match)
-                }
+                guard let slug, let match = items.first(where: { $0.slug == slug }) else { return }
+                onSelect(match)
             }
         )) { summary in
             VStack(alignment: .leading, spacing: 2) {

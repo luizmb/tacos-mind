@@ -187,7 +187,6 @@ struct AIChatFeatureTests {
     func saveToNotesCompactsWithoutClosing() async throws {
         var initial = AIChatFeature.State()
         initial.isAvailable = true
-        initial.isOpen = true
         initial.turns = [ChatTurn(role: .user, text: "Hi"), ChatTurn(role: .assistant, text: "Hello")]
         let store = TestStore(
             initial: initial,
@@ -209,11 +208,13 @@ struct AIChatFeatureTests {
         }
     }
 
-    @Test("close with no active session closes immediately, no confirmation")
-    func closeWithEmptySessionClosesImmediately() async throws {
+    /// The panel cannot dismiss itself — the app owns its presentation — so "closes
+    /// immediately" now means "raises no gate". `AppFeature`'s `when: hasNoLiveChatSession`
+    /// bridge is what turns this into an actual dismissal.
+    @Test("close with no active session raises no confirmation gate")
+    func closeWithEmptySessionRaisesNoGate() async throws {
         var initial = AIChatFeature.State()
         initial.isAvailable = true
-        initial.isOpen = true
         let store = TestStore(
             initial: initial,
             behavior: AIChatFeature.behavior(),
@@ -225,17 +226,13 @@ struct AIChatFeatureTests {
             )
         )
 
-        store.dispatch(.close) { state in
-            state.isOpen = false
-            state.isListening = false
-        }
+        store.dispatch(.close) { $0.isListening = false }
     }
 
     @Test("close with an active session asks for confirmation instead of closing")
     func closeWithActiveSessionAsksFirst() async throws {
         var initial = AIChatFeature.State()
         initial.isAvailable = true
-        initial.isOpen = true
         initial.turns = [ChatTurn(role: .user, text: "Hi")]
         let store = TestStore(
             initial: initial,
@@ -254,7 +251,6 @@ struct AIChatFeatureTests {
     @Test("cancelClose keeps the session and the panel open")
     func cancelCloseKeepsSession() async throws {
         var initial = AIChatFeature.State()
-        initial.isOpen = true
         initial.turns = [ChatTurn(role: .user, text: "Hi")]
         initial.isConfirmingClose = true
         let store = TestStore(
@@ -274,7 +270,6 @@ struct AIChatFeatureTests {
     @Test("confirmCloseAndDiscard closes and drops the session with no save")
     func confirmCloseAndDiscardClearsSession() async throws {
         var initial = AIChatFeature.State()
-        initial.isOpen = true
         initial.turns = [ChatTurn(role: .user, text: "Hi")]
         initial.draftText = "typing…"
         initial.isConfirmingClose = true
@@ -290,7 +285,6 @@ struct AIChatFeatureTests {
         )
 
         store.dispatch(.confirmCloseAndDiscard) { state in
-            state.isOpen = false
             state.isListening = false
             state.isConfirmingClose = false
             state.turns = []
@@ -302,7 +296,6 @@ struct AIChatFeatureTests {
     @Test("confirmCloseAndSave closes, clears the session, and fires notesCompacted")
     func confirmCloseAndSaveClearsAndCompacts() async throws {
         var initial = AIChatFeature.State()
-        initial.isOpen = true
         initial.turns = [ChatTurn(role: .user, text: "Hi"), ChatTurn(role: .assistant, text: "Hello")]
         initial.isConfirmingClose = true
         let store = TestStore(
@@ -317,7 +310,6 @@ struct AIChatFeatureTests {
         )
 
         store.dispatch(.confirmCloseAndSave) { state in
-            state.isOpen = false
             state.isListening = false
             state.isConfirmingClose = false
             state.turns = []
@@ -332,13 +324,19 @@ struct AIChatFeatureTests {
         }
     }
 
-    @Test("open always starts a fresh session, even if one was left over")
-    func openResetsAnyPriorSession() async throws {
-        var initial = AIChatFeature.State()
-        initial.turns = [ChatTurn(role: .user, text: "leftover")]
-        initial.draftText = "leftover draft"
-        initial.brainstorming = "Notes for this article"
-        initial.lastInputWasVoice = true
+    /// Every open is a fresh session, but that is no longer something `.start` has to
+    /// remember to do: presenting the panel *constructs* the state, so there is never a
+    /// leftover session for it to reset. All `.start` does is ask whether the on-device
+    /// assistant exists.
+    @Test("a freshly constructed session carries only the article's notes")
+    func aFreshSessionCarriesOnlyTheNotes() async throws {
+        let initial = AIChatFeature.State(brainstorming: "Notes for this article")
+        #expect(initial.turns.isEmpty)
+        #expect(initial.draftText.isEmpty)
+        #expect(initial.isConfirmingClose == false)
+        #expect(initial.lastInputWasVoice == false)
+        #expect(initial.brainstorming == "Notes for this article")
+
         let store = TestStore(
             initial: initial,
             behavior: AIChatFeature.behavior(),
@@ -350,18 +348,7 @@ struct AIChatFeatureTests {
             )
         )
 
-        store.dispatch(.open) { state in
-            state.isOpen = true
-            state.turns = []
-            state.draftText = ""
-            state.fieldMode = .userWriting
-            state.isResponding = false
-            state.isListening = false
-            state.isConfirmingClose = false
-            state.lastError = nil
-            state.lastInputWasVoice = false
-        }
-
+        store.dispatch(.start) { _ in }
         await store.runEffects()
 
         store.receive(AIChatFeature.Action.prism.setAvailability) { available, state in

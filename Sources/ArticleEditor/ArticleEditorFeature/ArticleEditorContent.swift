@@ -19,7 +19,6 @@ public struct ArticleEditorContent: View {
     let allBlockKinds: [ContentBlockKind]
     let allSummaries: [ArticleSummary]
     let hasUnsavedChanges: Bool
-    let isConfirmingDiscardOpen: Binding<Bool>
     let isConfirmingRevert: Binding<Bool>
     let canUndo: Bool
     let canRedo: Bool
@@ -38,7 +37,6 @@ public struct ArticleEditorContent: View {
     let onRevert: () -> Void
     let onUndo: () -> Void
     let onRedo: () -> Void
-    let onConfirmDiscardAndOpen: () -> Void
     let onKeepMine: () -> Void
     let onReloadTheirs: () -> Void
     let onBuild: () -> Void
@@ -46,8 +44,12 @@ public struct ArticleEditorContent: View {
     let onOpenChat: () -> Void
 
     public var body: some View {
+        // This screen only exists because an article was opened, so "nothing here" can
+        // only ever mean "the file is still loading" — the "no article open" case belongs
+        // to the detail column, which is where `AppRouter` now renders it.
         if !isDocumentOpen {
-            ContentUnavailableView("No Article Open", systemImage: "doc.text", description: Text("Choose an article from the sidebar."))
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             Form {
                 if case .conflict = conflict {
@@ -80,16 +82,6 @@ public struct ArticleEditorContent: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This discards every edit made since the last save and can't be undone.")
-            }
-            .confirmationDialog(
-                "Discard unsaved changes and open the other article?",
-                isPresented: isConfirmingDiscardOpen,
-                titleVisibility: .visible
-            ) {
-                Button("Discard and Open", role: .destructive, action: onConfirmDiscardAndOpen)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This article has unsaved changes. Switching now discards them — save first if you want to keep them.")
             }
         }
     }
