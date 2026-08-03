@@ -2,8 +2,7 @@ import AppDomain
 import SwiftUI
 
 public struct GitHubSyncContent: View {
-    @Environment(\.dismiss) private var dismiss
-
+    let path: Binding<[GitHubSyncRoute]>
     let isConfigured: Bool
     let repoURL: String
     let branch: String
@@ -15,6 +14,7 @@ public struct GitHubSyncContent: View {
     let lastPRURL: URL?
     let lastError: String?
     let isConfirmingPull: Binding<Bool>
+    let onDone: () -> Void
     let onRequestLink: () -> Void
     let onRequestUnlink: () -> Void
     let onRequestEditBranch: () -> Void
@@ -27,13 +27,16 @@ public struct GitHubSyncContent: View {
     let isUnlinking: Bool
     let onConfirmUnlink: () -> Void
 
-    let linkSheet: LinkRepositoryContent
-    let isLinkPresented: Binding<Bool>
-    let editBranchSheet: EditBranchContent
-    let isEditingBranch: Binding<Bool>
+    let linkScreen: LinkRepositoryContent
+    let editBranchScreen: EditBranchContent
 
+    /// Link and Edit Branch are **pushed**, not sheeted. Two sheets and two confirmation
+    /// dialogs presented from inside a sheet is more presentation bookkeeping than
+    /// SwiftUI reliably tracks — it was leaving a modal on top with no working
+    /// dismiss — and neither form was ever conceptually modal to begin with. What's left
+    /// is two confirmation dialogs on one view, which is ordinary.
     public var body: some View {
-        NavigationStack {
+        NavigationStack(path: path) {
             Form {
                 repositorySection
                 actionsSection
@@ -47,37 +50,43 @@ public struct GitHubSyncContent: View {
             .navigationTitle("GitHub Sync")
             .toolbar {
                 // macOS sheets get no close affordance for free — without this the sheet
-                // (confirmed via screenshot) has no way to dismiss at all.
+                // (confirmed via screenshot) has no way to dismiss at all. Dispatches
+                // rather than calling SwiftUI's `dismiss()`, so the store stays the only
+                // thing that decides whether this sheet is up.
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done", action: onDone)
                 }
             }
-            .sheet(isPresented: isLinkPresented) { linkSheet }
-            .sheet(isPresented: isEditingBranch) { editBranchSheet }
-            .confirmationDialog(
-                "Unlink this repository?",
-                isPresented: isConfirmingUnlink,
-                titleVisibility: .visible
-            ) {
-                Button("Unlink", role: .destructive, action: onConfirmUnlink)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Local articles are kept — you'll just need to link again to sync them.")
-            }
-            .confirmationDialog(
-                "This will overwrite local changes",
-                isPresented: isConfirmingPull,
-                titleVisibility: .visible
-            ) {
-                Button("Pull and Overwrite", role: .destructive, action: onConfirmPull)
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                if let pendingPullPreview {
-                    Text(
-                        "\(pendingPullPreview.localOnlyChanges.count) article(s) have local changes not on GitHub: " +
-                        "\(pendingPullPreview.localOnlyChanges.joined(separator: ", ")). Pulling will overwrite them."
-                    )
+            .navigationDestination(for: GitHubSyncRoute.self) { route in
+                switch route {
+                case .link: linkScreen
+                case .editBranch: editBranchScreen
                 }
+            }
+        }
+        .confirmationDialog(
+            "Unlink this repository?",
+            isPresented: isConfirmingUnlink,
+            titleVisibility: .visible
+        ) {
+            Button("Unlink", role: .destructive, action: onConfirmUnlink)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Local articles are kept — you'll just need to link again to sync them.")
+        }
+        .confirmationDialog(
+            "This will overwrite local changes",
+            isPresented: isConfirmingPull,
+            titleVisibility: .visible
+        ) {
+            Button("Pull and Overwrite", role: .destructive, action: onConfirmPull)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if let pendingPullPreview {
+                Text(
+                    "\(pendingPullPreview.localOnlyChanges.count) article(s) have local changes not on GitHub: " +
+                    "\(pendingPullPreview.localOnlyChanges.joined(separator: ", ")). Pulling will overwrite them."
+                )
             }
         }
     }

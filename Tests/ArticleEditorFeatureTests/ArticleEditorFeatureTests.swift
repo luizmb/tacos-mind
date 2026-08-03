@@ -15,6 +15,15 @@ struct ArticleEditorFeatureTests {
         Article(title: "Title for \(slug)", slug: slug, emphasis: .text, blocks: [.paragraph("Body")])
     }
 
+    private func summary(slug: String, number: Int = 1) -> ArticleSummary {
+        ArticleSummary(
+            url: URL(fileURLWithPath: "/tmp/Articles/\(slug).json"),
+            slug: slug,
+            title: "Title for \(slug)",
+            number: number
+        )
+    }
+
     /// Test-only spy for `openInBrowser` calls — exercised serially within a single
     /// `@MainActor` test function, so the lack of real synchronization is safe despite
     /// `@unchecked Sendable`.
@@ -24,6 +33,7 @@ struct ArticleEditorFeatureTests {
     }
 
     private func makeStore(
+        opening: ArticleSummary? = nil,
         openDocument: @escaping @Sendable (URL) -> Publisher<(article: Article, blockIDs: [UUID]), ArticleEditorError> = { url in
             .fail(.fileReadFailed(path: url.path, reason: "unused"))
         },
@@ -34,7 +44,7 @@ struct ArticleEditorFeatureTests {
         openInBrowser: @escaping @MainActor @Sendable (URL) -> Void = { _ in }
     ) -> TestStore<ArticleEditorFeature.Action, ArticleEditorFeature.State, ArticleEditorFeature.Environment> {
         TestStore(
-            initial: ArticleEditorFeature.State(),
+            initial: ArticleEditorFeature.State(opening: opening ?? summary(slug: "pure-functions")),
             behavior: ArticleEditorFeature.behavior(),
             environment: ArticleEditorFeature.Environment(
                 openDocument: openDocument,
@@ -50,7 +60,7 @@ struct ArticleEditorFeatureTests {
         )
     }
 
-    /// Drains one full `.open` round-trip: `.open` fires both `openDocument` and
+    /// Drains one full `.start` round-trip: `.start` fires both `openDocument` and
     /// `listArticles` concurrently, so `.opened`/`.allSummariesLoaded` can arrive in
     /// either order — this drains whichever is actually next, rather than assuming one.
     private func receiveOpened(
@@ -77,46 +87,40 @@ struct ArticleEditorFeatureTests {
         }
     }
 
-    /// Regression test for a real, user-reported bug: the very first `.open` in a
-    /// session (no previous document to "reuse" a URL from) fell back to a bogus
-    /// `slug.swift`-relative URL, which resolved to the filesystem root and made every
-    /// save fail with "the volume is read only." `document.url` must always be the URL
-    /// that was actually opened, never guessed.
-    @Test("opening the first document of a session sets document.url to the URL that was opened")
-    func firstOpenUsesTheActualURL() async throws {
-        let url = URL(fileURLWithPath: "/tmp/Articles/pure-functions.json")
+    /// Regression test for a real, user-reported bug: the URL a document was loaded from
+    /// used to be guessed rather than carried, and the guess resolved to the filesystem
+    /// root, making every save fail with "the volume is read only." The screen is now
+    /// constructed for exactly one article, so `document.url` is that article's URL by
+    /// construction — this pins it.
+    @Test(".start loads the article the screen was constructed for")
+    func startLoadsTheArticleTheScreenWasBuiltFor() async throws {
+        let target = summary(slug: "pure-functions")
         let article = article(slug: "pure-functions")
-        let store = makeStore(openDocument: { _ in .just((article: article, blockIDs: [UUID()])) })
+        let store = makeStore(opening: target, openDocument: { _ in .just((article: article, blockIDs: [UUID()])) })
 
-        store.dispatch(.open(url)) { _ in }
+        store.dispatch(.start) { _ in }
         await store.runEffects()
-        try await receiveOpened(on: store, expectedURL: url)
+        try await receiveOpened(on: store, expectedURL: target.url)
 
-        #expect(store.state.document?.url == url)
+        #expect(store.state.document?.url == target.url)
     }
 
-    /// The same bug, but for the second document opened in a session — reusing
-    /// "whatever `document.url` already was" would have carried the FIRST article's
-    /// (already-wrong) URL into the second, regardless of which article this actually is.
-    @Test("opening a second, different document uses ITS OWN URL, not the previous document's")
-    func secondOpenUsesItsOwnURLNotThePreviousOnes() async throws {
-        let firstURL = URL(fileURLWithPath: "/tmp/Articles/pure-functions.json")
-        let secondURL = URL(fileURLWithPath: "/tmp/Articles/side-effects.json")
-        let firstArticle = article(slug: "pure-functions")
-        let secondArticle = article(slug: "side-effects")
-        let store = makeStore(openDocument: { url in
-            .just((article: url == firstURL ? firstArticle : secondArticle, blockIDs: [UUID()]))
-        })
+    /// Switching articles replaces the stack element, but does not cancel the load the
+    /// previous screen already started — so that load still arrives, addressed to the
+    /// screen that replaced it. Without the URL guard it would quietly overwrite the new
+    /// article with the old one's contents.
+    @Test("a load that lands for a different article than this screen's is ignored")
+    func aStaleLoadForAnotherArticleIsIgnored() async throws {
+        let target = summary(slug: "side-effects", number: 2)
+        let store = makeStore(opening: target)
+        let stale = article(slug: "pure-functions")
 
-        store.dispatch(.open(firstURL)) { _ in }
+        store.dispatch(
+            .opened(URL(fileURLWithPath: "/tmp/Articles/pure-functions.json"), .success((article: stale, blockIDs: [UUID()])))
+        ) { _ in }
         await store.runEffects()
-        try await receiveOpened(on: store, expectedURL: firstURL)
-        #expect(store.state.document?.url == firstURL)
 
-        store.dispatch(.open(secondURL)) { _ in }
-        await store.runEffects()
-        try await receiveOpened(on: store, expectedURL: secondURL)
-        #expect(store.state.document?.url == secondURL)
+        #expect(store.state.document == nil)
     }
 
     @Test(".build regenerates the whole site and reports success")
@@ -148,10 +152,11 @@ struct ArticleEditorFeatureTests {
     @Test(".run generates the current article and opens its preview URL in the browser")
     func runGeneratesCurrentArticleAndOpensBrowser() async throws {
         let recorder = URLRecorder()
-        let url = URL(fileURLWithPath: "/tmp/Articles/pure-functions.json")
+        let target = summary(slug: "pure-functions")
         let previewURL = URL(fileURLWithPath: "/tmp/dist/articles/pure-functions.html")
         let currentArticle = article(slug: "pure-functions")
         let store = makeStore(
+            opening: target,
             openDocument: { _ in .just((article: currentArticle, blockIDs: [UUID()])) },
             generateArticle: { slug in
                 #expect(slug == "pure-functions")
@@ -160,9 +165,9 @@ struct ArticleEditorFeatureTests {
             openInBrowser: { recorder.record($0) }
         )
 
-        store.dispatch(.open(url)) { _ in }
+        store.dispatch(.start) { _ in }
         await store.runEffects()
-        try await receiveOpened(on: store, expectedURL: url)
+        try await receiveOpened(on: store, expectedURL: target.url)
 
         store.dispatch(.run) { _ in }
         await store.runEffects()

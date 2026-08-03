@@ -20,7 +20,6 @@ public enum AIChatFeature {
     }
 
     public struct State: Sendable, Equatable {
-        public var isOpen: Bool
         public var isAvailable: Bool
         public var isListening: Bool
         public var isResponding: Bool
@@ -29,8 +28,9 @@ public enum AIChatFeature {
         public var fieldMode: FieldMode
         public var turns: [ChatTurn]
         public var lastError: String?
-        /// Mirrors the open article's Brainstorming field — kept in sync by the app-level
-        /// bridge (see `AppFeature.swift`), never edited directly from this feature.
+        /// Mirrors the open article's Brainstorming field — seeded when the panel is
+        /// presented and kept current by an app-level bridge (see `AppFeature.swift`),
+        /// never edited directly from this feature.
         public var brainstorming: String
         /// `true` while the "save this conversation before closing?" dialog is up — set by
         /// `.close` whenever there's an active session (`turns` non-empty) to lose,
@@ -43,8 +43,11 @@ public enum AIChatFeature {
         /// opening a fresh session.
         public var lastInputWasVoice: Bool
 
-        public init() {
-            isOpen = false
+        /// A fresh session for whichever article is open. Presenting the panel builds one
+        /// of these; dismissing it throws it away — so "every open is a new conversation"
+        /// is a property of the state's lifetime rather than a reset the reducer has to
+        /// remember to perform.
+        public init(brainstorming: String = "") {
             isAvailable = false
             isListening = false
             isResponding = false
@@ -53,7 +56,7 @@ public enum AIChatFeature {
             fieldMode = .userWriting
             turns = []
             lastError = nil
-            brainstorming = ""
+            self.brainstorming = brainstorming
             isConfirmingClose = false
             lastInputWasVoice = false
         }
@@ -61,10 +64,13 @@ public enum AIChatFeature {
 
     @Prisms
     public enum Action: Sendable {
-        case open
+        /// Dispatched by the view's `onAppear`. The session is already fresh by
+        /// construction, so this only asks the world whether the assistant exists.
+        case start
         case setAvailability(Bool)
-        /// Requests closing the panel. Closes immediately if there's no active session
-        /// (`turns` empty); otherwise gates behind `isConfirmingClose` — see
+        /// Requests closing the panel. A panel cannot dismiss itself — the parent owns
+        /// its presentation — so this either raises the "save this conversation?" gate
+        /// (an active session) or falls through for the app to dismiss on. See
         /// `confirmCloseAndSave`/`confirmCloseAndDiscard`/`cancelClose`.
         case close
         case cancelClose
@@ -107,7 +113,6 @@ public enum AIChatFeature {
     }
 
     public struct ViewState: Sendable, Equatable {
-        public var isOpen: Bool
         public var isAvailable: Bool
         public var isListening: Bool
         public var isResponding: Bool
@@ -121,7 +126,7 @@ public enum AIChatFeature {
 
     @Prisms
     public enum ViewAction: Sendable {
-        case open
+        case onAppear
         case close
         case cancelClose
         case confirmCloseAndDiscard
@@ -136,7 +141,6 @@ public enum AIChatFeature {
     public static let mapState = Reader<Environment, @MainActor @Sendable (State) -> ViewState> { _ in
         { state in
             ViewState(
-                isOpen: state.isOpen,
                 isAvailable: state.isAvailable,
                 isListening: state.isListening,
                 isResponding: state.isResponding,
@@ -153,7 +157,7 @@ public enum AIChatFeature {
     public static let mapAction = Reader<Environment, @Sendable (ViewAction) -> Action> { _ in
         { viewAction in
             switch viewAction {
-            case .open: .open
+            case .onAppear: .start
             case .close: .close
             case .cancelClose: .cancelClose
             case .confirmCloseAndDiscard: .confirmCloseAndDiscard
@@ -167,7 +171,7 @@ public enum AIChatFeature {
         }
     }
 
-    public static func initialState(with _: Void) -> State { .init() }
+    public static func initialState(with brainstorming: String) -> State { .init(brainstorming: brainstorming) }
 
     public static func behavior() -> Behavior<Action, State, Environment> {
         chatBehavior() <> listeningSupervisor()
@@ -178,23 +182,11 @@ public enum AIChatFeature {
     private static func chatBehavior() -> Behavior<Action, State, Environment> {
         .handle { action, context in
             switch action {
-            // Every open is a fresh session — the previous conversation (if any) has
-            // already been resolved (saved or discarded) by the close gate below, so
-            // there's nothing left to carry over except `brainstorming`, which the
-            // app-level bridge keeps current for whichever article is open.
-            case .open:
-                return .reduce { state in
-                    state.isOpen = true
-                    state.turns = []
-                    state.draftText = ""
-                    state.fieldMode = .userWriting
-                    state.isResponding = false
-                    state.isListening = false
-                    state.isConfirmingClose = false
-                    state.lastError = nil
-                    state.lastInputWasVoice = false
-                }
-                .produce { ctx in
+            // Nothing to reset — presenting the panel built this state a moment ago, so
+            // the session is fresh by construction. All that's left is to ask the world
+            // whether the on-device assistant is actually there.
+            case .start:
+                return .produce { ctx in
                     let transform: @Sendable (()) -> Action = const(.setAvailability(ctx.environment.isAssistantAvailable()))
                     return Publisher<Void, Never>.just(()).asEffect(transform)
                 }
@@ -202,21 +194,23 @@ public enum AIChatFeature {
             case .setAvailability(let available):
                 return .reduce { $0.isAvailable = available }
 
+            // With no session to lose there is nothing to ask, so this falls through to
+            // the app, which dismisses the panel. With one, the gate goes up first and
+            // the app dismisses on whichever answer comes back.
             case .close:
                 guard let state = context.stateBefore, !state.turns.isEmpty else {
-                    return .reduce { state in
-                        state.isOpen = false
-                        state.isListening = false
-                    }
+                    return .reduce { $0.isListening = false }
                 }
                 return .reduce { $0.isConfirmingClose = true }
 
             case .cancelClose:
                 return .reduce { $0.isConfirmingClose = false }
 
+            // Clearing `turns` here (rather than leaving it to the state being thrown
+            // away) keeps the gate closed for the frame between the answer and the
+            // dismissal — otherwise `close` could re-raise it on the way out.
             case .confirmCloseAndDiscard:
                 return .reduce { state in
-                    state.isOpen = false
                     state.isListening = false
                     state.isConfirmingClose = false
                     state.turns = []
@@ -228,7 +222,6 @@ public enum AIChatFeature {
                 guard let state = context.stateBefore else { return .doNothing }
                 let compacted = Self.compactNotes(state.turns)
                 return .reduce { state in
-                    state.isOpen = false
                     state.isListening = false
                     state.isConfirmingClose = false
                     state.turns = []

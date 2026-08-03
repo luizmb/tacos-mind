@@ -207,11 +207,24 @@ struct GitHubSyncFeatureTests {
         }
     }
 
-    @Test("setPresented toggles the sheet's store-backed presentation flag")
-    func setPresentedTogglesFlag() async throws {
+    /// The back button and back-swipe inside the sheet arrive as `setPath`, the same
+    /// action a programmatic push uses, so there is only one writer either way.
+    @Test("setPath is what an interactive pop delivers")
+    func setPathAcceptsAnInteractivePop() async throws {
+        var initial = GitHubSyncFeature.State()
+        initial.path = [.link]
+        let store = makeStore(initial: initial)
+        store.dispatch(.setPath([])) { $0.path = [] }
+    }
+
+    /// Whether the *sheet* is up is not this feature's business — `AppFeature` owns that
+    /// presentation, so asking to close is a pure trigger with no local effect.
+    @Test("requestClose is a pure trigger — no local state change, no effect")
+    func requestCloseIsAPureTrigger() async throws {
         let store = makeStore()
-        store.dispatch(.setPresented(true)) { $0.isPresented = true }
-        store.dispatch(.setPresented(false)) { $0.isPresented = false }
+        store.dispatch(.requestClose) { _ in }
+        await store.runEffects()
+        #expect(store.receivedActions.isEmpty)
     }
 
     // MARK: - Link flow
@@ -220,7 +233,7 @@ struct GitHubSyncFeatureTests {
     func requestLinkOpensModal() async throws {
         let store = makeStore()
         store.dispatch(.requestLink) { state in
-            state.isLinkPresented = true
+            state.path = [.link]
             state.linkRepoInput = ""
             state.linkBranchInput = "main"
             state.linkTokenInput = ""
@@ -231,9 +244,9 @@ struct GitHubSyncFeatureTests {
     @Test("cancelLink closes the modal without linking anything")
     func cancelLinkClosesModal() async throws {
         var initial = GitHubSyncFeature.State()
-        initial.isLinkPresented = true
+        initial.path = [.link]
         let store = makeStore(initial: initial)
-        store.dispatch(.cancelLink) { $0.isLinkPresented = false }
+        store.dispatch(.cancelLink) { $0.path = [] }
     }
 
     @Test("confirmLink with a blank field shows an error and does nothing else")
@@ -250,7 +263,7 @@ struct GitHubSyncFeatureTests {
     @Test("confirmLink failure surfaces the error and leaves the modal open")
     func confirmLinkFailureKeepsModalOpen() async throws {
         var initial = GitHubSyncFeature.State()
-        initial.isLinkPresented = true
+        initial.path = [.link]
         initial.linkRepoInput = settings.repoURL
         initial.linkBranchInput = settings.branch
         initial.linkTokenInput = settings.token
@@ -271,14 +284,14 @@ struct GitHubSyncFeatureTests {
             state.isLinking = false
             state.linkError = error.readableDescription
         }
-        // isLinkPresented stays true — TestStore's exhaustive check confirms nothing
-        // else (like closing the modal) happened on failure.
+        // `path` stays `[.link]` — TestStore's exhaustive check confirms nothing else
+        // (like popping the form out from under the user) happened on failure.
     }
 
     @Test("confirmLink success on an empty Articles dir pulls remote content down")
     func confirmLinkSuccessEmptyDirPulls() async throws {
         var initial = GitHubSyncFeature.State()
-        initial.isLinkPresented = true
+        initial.path = [.link]
         initial.linkRepoInput = settings.repoURL
         initial.linkBranchInput = settings.branch
         initial.linkTokenInput = settings.token
@@ -306,7 +319,7 @@ struct GitHubSyncFeatureTests {
         store.receive(GitHubSyncFeature.Action.prism.linked) { _, state in
             state.settings = settings
             state.isLinking = false
-            state.isLinkPresented = false
+            state.path = []
             state.linkRepoInput = ""
             state.linkBranchInput = ""
             state.linkTokenInput = ""
@@ -331,14 +344,18 @@ struct GitHubSyncFeatureTests {
         store.receive(GitHubSyncFeature.Action.prism.pullApplied) { _, state in
             state.isPulling = false
             state.isPerformingFirstSync = false
-            state.isPresented = false
         }
+
+        // The sheet does not close itself — it says the first sync is done and the app
+        // dismisses it, because the app is what owns this sheet's presentation.
+        await store.runEffects()
+        store.receive(GitHubSyncFeature.Action.prism.firstSyncCompleted) { _ in }
     }
 
     @Test("confirmLink success on a non-empty Articles dir pushes local content up instead")
     func confirmLinkSuccessNonEmptyDirPushes() async throws {
         var initial = GitHubSyncFeature.State()
-        initial.isLinkPresented = true
+        initial.path = [.link]
         initial.linkRepoInput = settings.repoURL
         initial.linkBranchInput = settings.branch
         initial.linkTokenInput = settings.token
@@ -361,7 +378,7 @@ struct GitHubSyncFeatureTests {
         store.receive(GitHubSyncFeature.Action.prism.linked) { _, state in
             state.settings = settings
             state.isLinking = false
-            state.isLinkPresented = false
+            state.path = []
             state.linkRepoInput = ""
             state.linkBranchInput = ""
             state.linkTokenInput = ""
@@ -381,8 +398,10 @@ struct GitHubSyncFeatureTests {
             state.isCommitting = false
             state.lastCommitOutcome = outcome
             state.isPerformingFirstSync = false
-            state.isPresented = false
         }
+
+        await store.runEffects()
+        store.receive(GitHubSyncFeature.Action.prism.firstSyncCompleted) { _ in }
     }
 
     // MARK: - Unlink flow
@@ -448,7 +467,7 @@ struct GitHubSyncFeatureTests {
     func requestEditBranchSeedsForm() async throws {
         let store = makeStore(initial: configured())
         store.dispatch(.requestEditBranch) { state in
-            state.isEditingBranch = true
+            state.path = [.editBranch]
             state.editBranchInput = settings.branch
         }
     }
@@ -462,7 +481,7 @@ struct GitHubSyncFeatureTests {
     @Test("confirmEditBranch updates the stored branch and closes the modal")
     func confirmEditBranchSucceeds() async throws {
         var initial = configured()
-        initial.isEditingBranch = true
+        initial.path = [.editBranch]
         initial.editBranchInput = "main"
         let store = makeStore(initial: initial, updateBranch: { _ in .just(()) })
 
@@ -472,7 +491,7 @@ struct GitHubSyncFeatureTests {
 
         store.receive(GitHubSyncFeature.Action.prism.branchUpdated) { _, state in
             state.isSavingBranch = false
-            state.isEditingBranch = false
+            state.path = []
             state.settings?.branch = "main"
         }
     }
@@ -480,7 +499,7 @@ struct GitHubSyncFeatureTests {
     @Test("confirmEditBranch failure surfaces the error and keeps the modal open")
     func confirmEditBranchFailureKeepsModalOpen() async throws {
         var initial = configured()
-        initial.isEditingBranch = true
+        initial.path = [.editBranch]
         initial.editBranchInput = "main"
         let store = makeStore(initial: initial, updateBranch: { _ in .fail(.network("boom")) })
 

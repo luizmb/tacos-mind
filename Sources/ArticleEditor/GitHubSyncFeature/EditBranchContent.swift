@@ -8,32 +8,32 @@ public struct EditBranchContent: View {
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
+    /// A pushed screen, so no `NavigationStack` of its own — it is rendered inside
+    /// `GitHubSyncContent`'s stack, which supplies the bar this toolbar attaches to.
     public var body: some View {
-        NavigationStack {
-            Form {
-                Section("Branch") {
-                    TextField("Branch", text: branchInput)
-                        #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        #endif
-                        .autocorrectionDisabled()
-                }
+        Form {
+            Section("Branch") {
+                TextField("Branch", text: branchInput)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .autocorrectionDisabled()
             }
-            .navigationTitle("Edit Branch")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(action: onConfirm) {
-                        if isSaving {
-                            ProgressView()
-                        } else {
-                            Text("Save")
-                        }
+        }
+        .navigationTitle("Edit Branch")
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", action: onCancel)
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action: onConfirm) {
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Text("Save")
                     }
-                    .disabled(isSaving)
                 }
+                .disabled(isSaving)
             }
         }
     }

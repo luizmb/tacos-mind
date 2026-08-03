@@ -53,21 +53,33 @@ struct ArticleListFeatureTests {
             }
             state.isCreatingArticle = false
             state.summaries.append(created)
-            state.selectedSlug = created.slug
+        }
+
+        // A new article opens exactly the way tapping one does — by going back through
+        // `.select`, so there is only ever one path into the editor.
+        await store.runEffects()
+        store.receive(ArticleListFeature.Action.prism.select) { selected, _ in
+            #expect(selected == summary)
         }
 
         #expect(store.state.summaries == [summary])
-        #expect(store.state.selectedSlug == summary.slug)
     }
 
-    @Test("selecting an article sets selectedSlug immediately, not deferred until the editor confirms")
-    func selectSetsSelectedSlugImmediately() async throws {
+    /// `.select` used to set the highlight itself, optimistically, because the compact
+    /// push was driven off that very field and a deferred update meant the push silently
+    /// never fired. The push is now driven by the app's navigation stack, and the
+    /// highlight is re-derived from it in the same synchronous step — so this feature
+    /// having no opinion is the point, not an omission.
+    @Test("select is a pure intent — the highlight is the app's to derive, not this feature's to guess")
+    func selectIsAPureIntent() async throws {
         let summary = ArticleSummary(url: URL(fileURLWithPath: "/tmp/Articles/pure-functions.json"), slug: "pure-functions", title: "Pure Functions", number: 1)
         let store = makeStore()
 
-        store.dispatch(.select(summary)) { $0.selectedSlug = summary.slug }
+        store.dispatch(.select(summary)) { _ in }
+        await store.runEffects()
 
-        #expect(store.state.selectedSlug == summary.slug)
+        #expect(store.receivedActions.isEmpty)
+        #expect(store.state.selectedSlug == nil)
     }
 
     @Test("a failed creation (e.g. a duplicate name) surfaces the error and keeps the prompt open")

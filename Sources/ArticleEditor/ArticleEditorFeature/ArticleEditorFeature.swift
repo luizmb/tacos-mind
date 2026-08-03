@@ -14,6 +14,11 @@ import SwiftUI
 @Feature(strategy: .observationSimple)
 public enum ArticleEditorFeature {
     public struct State: Sendable, Equatable {
+        /// The sidebar entry this screen was pushed for — the identity the editor exists
+        /// to edit, available from the moment the screen is constructed. `document` is
+        /// `nil` until the file finishes loading, so this is what the sidebar highlight
+        /// and the "which article is this?" question read instead.
+        public var opened: ArticleSummary
         public var document: OpenDocument?
         public var allSummaries: [ArticleSummary]
         public var isSaving: Bool
@@ -23,35 +28,35 @@ public enum ArticleEditorFeature {
         /// The last Build outcome, shown via the toolbar button's `.help(...)` — success
         /// or failure text, `nil` before the first Build.
         public var buildStatus: String?
-        /// Set instead of actually opening when `.open` arrives while the current
-        /// document has unsaved changes — the URL waiting on the user's confirmation
-        /// (discard and open anyway, or cancel and stay).
-        public var pendingOpenURL: URL?
         /// `true` while the "revert all unsaved changes?" confirmation is up — store
-        /// state, not local SwiftUI `@State`, same as `pendingOpenURL` above.
+        /// state, not local SwiftUI `@State`, same convention as every other prompt here.
         public var isConfirmingRevert: Bool
 
-        public init(document: OpenDocument? = nil) {
-            self.document = document
+        /// A fresh screen for `summary` — the file itself loads on `.start`. Seeding is
+        /// construction, so there is no partly-filled editor for a caller to finish
+        /// assembling, and no window in which this screen shows a previous article's data.
+        public init(opening summary: ArticleSummary) {
+            opened = summary
+            document = nil
             allSummaries = []
             isSaving = false
             saveError = nil
             isBuilding = false
             buildStatus = nil
-            pendingOpenURL = nil
             isConfirmingRevert = false
         }
     }
 
     @Prisms
     public enum Action: Sendable {
-        case open(URL)
-        case confirmDiscardAndOpen
-        case cancelPendingOpen
-        /// Carries the URL that was actually opened — `openDocument`'s result doesn't
-        /// include it, and reusing "whatever `document.url` already was" (the old
-        /// approach) is wrong for the very first document of a session (nothing to reuse)
-        /// and wrong again for every document after it (it'd reuse the PREVIOUS one's URL).
+        /// Dispatched by the view's `onAppear`. Loads `state.opened` — switching articles
+        /// is a *new screen*, not a message to an existing one, so there is no `.open(URL)`
+        /// and no "am I allowed to replace what's here?" gate; the app answers that
+        /// question before this screen is ever built (see `AppNavigation`'s gates).
+        case start
+        /// Carries the URL that was actually loaded, so a load still in flight for the
+        /// article the user just navigated away from cannot land in the screen that
+        /// replaced it (the stack element is replaced, the in-flight effect is not).
         case opened(URL, Result<(article: Article, blockIDs: [UUID]), ArticleEditorError>)
         case allSummariesLoaded(Result<[ArticleSummary], ArticleEditorError>)
 
@@ -91,7 +96,7 @@ public enum ArticleEditorFeature {
         case fileChangedOnDisk
         case diskHashChecked(Result<String, ArticleEditorError>)
         case diskArticleParsed(Result<Article, ArticleEditorError>)
-        case reloaded(Result<(article: Article, blockIDs: [UUID]), ArticleEditorError>)
+        case reloaded(URL, Result<(article: Article, blockIDs: [UUID]), ArticleEditorError>)
         case keepMine
         case reloadTheirs
 
@@ -159,7 +164,6 @@ public enum ArticleEditorFeature {
         public var blocks: [EditableBlock]
         public var allBlockKinds: [ContentBlockKind]
         public var hasUnsavedChanges: Bool
-        public var pendingOpenURL: URL?
         public var isConfirmingRevert: Bool
         public var canUndo: Bool
         public var canRedo: Bool
@@ -173,6 +177,7 @@ public enum ArticleEditorFeature {
 
     @Prisms
     public enum ViewAction: Sendable {
+        case onAppear
         case setTitle(String)
         case setSlug(String)
         case setAuthor(String)
@@ -192,8 +197,6 @@ public enum ArticleEditorFeature {
         case revertChanges
         case undo
         case redo
-        case confirmDiscardAndOpen
-        case cancelPendingOpen
         case keepMine
         case reloadTheirs
         case build
@@ -218,7 +221,6 @@ public enum ArticleEditorFeature {
                 blocks: state.document?.blocks ?? [],
                 allBlockKinds: ContentBlockKind.allCases,
                 hasUnsavedChanges: state.document?.hasUnsavedChanges ?? false,
-                pendingOpenURL: state.pendingOpenURL,
                 isConfirmingRevert: state.isConfirmingRevert,
                 canUndo: state.document.map { $0.pendingUndoCheckpoint != nil || !$0.undoStack.isEmpty } ?? false,
                 canRedo: state.document.map { !$0.redoStack.isEmpty } ?? false,
@@ -235,6 +237,7 @@ public enum ArticleEditorFeature {
     public static let mapAction = Reader<Environment, @Sendable (ViewAction) -> Action> { _ in
         { viewAction in
             switch viewAction {
+            case .onAppear: .start
             case .setTitle(let value): .setTitle(value)
             case .setSlug(let value): .setSlug(value)
             case .setAuthor(let value): .setAuthor(value)
@@ -254,8 +257,6 @@ public enum ArticleEditorFeature {
             case .revertChanges: .revertChanges
             case .undo: .undo
             case .redo: .redo
-            case .confirmDiscardAndOpen: .confirmDiscardAndOpen
-            case .cancelPendingOpen: .cancelPendingOpen
             case .keepMine: .keepMine
             case .reloadTheirs: .reloadTheirs
             case .build: .build
@@ -265,7 +266,7 @@ public enum ArticleEditorFeature {
         }
     }
 
-    public static func initialState(with _: Void) -> State { .init() }
+    public static func initialState(with summary: ArticleSummary) -> State { .init(opening: summary) }
 
     public static func behavior() -> Behavior<Action, State, Environment> {
         editingBehavior() <> fileWatchSupervisor()
@@ -276,29 +277,21 @@ public enum ArticleEditorFeature {
     private static func editingBehavior() -> Behavior<Action, State, Environment> {
         .handle { action, context in
             switch action {
-            // Switching articles (or opening the very first one) while the current
-            // document has unsaved changes would otherwise silently discard them — the
-            // sidebar's `.select` bridges straight to `.open`, with no idea whether the
-            // editor has anything at risk. Gating it here, instead of at the bridge,
-            // keeps that knowledge (and the confirmation state) where it already lives.
-            case .open(let url):
-                guard context.stateBefore?.document?.hasUnsavedChanges == true else {
-                    return .produce { ctx in ctx.environment.openDocument(url).asEffect { Action.opened(url, $0) } }
-                        .produce { ctx in ctx.environment.listArticles().asEffect { Action.allSummariesLoaded($0) } }
-                }
-                return .reduce { $0.pendingOpenURL = url }
-
-            case .confirmDiscardAndOpen:
-                guard let url = context.stateBefore?.pendingOpenURL else { return .doNothing }
-                return .reduce { $0.pendingOpenURL = nil }
-                    .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
+            // The screen was constructed for exactly one article, so there is nothing to
+            // decide here: load it. Whether replacing whatever was previously on screen
+            // is allowed (a live chat session, unsaved edits) was settled by the app's
+            // navigation gates before this screen existed — see `AppNavigation`.
+            case .start:
+                guard let url = context.stateBefore?.opened.url else { return .doNothing }
+                return .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
                     .produce { ctx in ctx.environment.openDocument(url).asEffect { Action.opened(url, $0) } }
                     .produce { ctx in ctx.environment.listArticles().asEffect { Action.allSummariesLoaded($0) } }
 
-            case .cancelPendingOpen:
-                return .reduce { $0.pendingOpenURL = nil }
-
+            // A load for the article the user has since navigated away from must not land
+            // here: the stack element was replaced, but the effect it started was not
+            // cancelled, so it still arrives — addressed to this screen.
             case .opened(let url, .success(let result)):
+                guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { state in
                     var document = OpenDocument(url: url, article: result.article)
                     document.blocks = zip(result.blockIDs, result.article.blocks).map { EditableBlock(id: $0, block: $1) }
@@ -306,7 +299,8 @@ public enum ArticleEditorFeature {
                 }
                 .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
 
-            case .opened(_, .failure(let error)):
+            case .opened(let url, .failure(let error)):
+                guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { $0.saveError = error.readableDescription }
 
             case .allSummariesLoaded(.success(let summaries)):
@@ -467,16 +461,17 @@ public enum ArticleEditorFeature {
                 }
 
             case .fileChangedOnDisk:
-                guard let url = context.stateBefore?.document?.url else { return .doNothing }
+                guard let url = context.stateBefore?.opened.url else { return .doNothing }
                 return .produce { ctx in ctx.environment.checkDiskHash(url).asEffect { Action.diskHashChecked($0) } }
 
             case .diskHashChecked(.success(let hash)):
-                guard let document = context.stateBefore?.document else { return .doNothing }
+                guard let state = context.stateBefore, let document = state.document else { return .doNothing }
                 guard hash != document.lastWrittenHash else { return .doNothing }
+                let url = state.opened.url
                 guard document.hasUnsavedChanges else {
-                    return .produce { ctx in ctx.environment.openDocument(document.url).asEffect { Action.reloaded($0) } }
+                    return .produce { ctx in ctx.environment.openDocument(url).asEffect { Action.reloaded(url, $0) } }
                 }
-                return .produce { ctx in ctx.environment.parseDiskArticle(document.url).asEffect { Action.diskArticleParsed($0) } }
+                return .produce { ctx in ctx.environment.parseDiskArticle(url).asEffect { Action.diskArticleParsed($0) } }
 
             case .diskHashChecked(.failure):
                 return .doNothing
@@ -487,23 +482,24 @@ public enum ArticleEditorFeature {
             case .diskArticleParsed(.failure):
                 return .doNothing
 
-            case .reloaded(.success(let result)):
+            case .reloaded(let url, .success(let result)):
+                guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { state in
-                    guard let url = state.document?.url else { return }
                     state.document = OpenDocument(url: url, article: result.article)
                     state.document?.blocks = zip(result.blockIDs, result.article.blocks).map { EditableBlock(id: $0, block: $1) }
                 }
                 .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
 
-            case .reloaded(.failure(let error)):
+            case .reloaded(let url, .failure(let error)):
+                guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { $0.saveError = error.readableDescription }
 
             case .keepMine:
                 return .reduce { $0.document?.externalChange = .none }
 
             case .reloadTheirs:
-                guard let url = context.stateBefore?.document?.url else { return .doNothing }
-                return .produce { ctx in ctx.environment.openDocument(url).asEffect { Action.reloaded($0) } }
+                guard let url = context.stateBefore?.opened.url else { return .doNothing }
+                return .produce { ctx in ctx.environment.openDocument(url).asEffect { Action.reloaded(url, $0) } }
 
             case .build:
                 return .reduce { $0.isBuilding = true; $0.buildStatus = nil }
@@ -546,7 +542,7 @@ public enum ArticleEditorFeature {
     /// The `openInBrowser` Publisher above never actually yields a value (it only ever
     /// `finish()`es), so this transform is never invoked — it exists only to satisfy
     /// `asEffect`'s signature. Mirrors `AppFeature`'s `unreachableActionTransform`.
-    private static let unreachableRanTransform: @Sendable (()) -> Action = { _ in .cancelPendingOpen }
+    private static let unreachableRanTransform: @Sendable (()) -> Action = { _ in .cancelRevertConfirmation }
 
     // MARK: - Undo/redo
 
@@ -611,7 +607,11 @@ public enum ArticleEditorFeature {
     private static func fileWatchSupervisor() -> Behavior<Action, State, Environment> {
         .supervise { state in
             Supervision { env in
-                guard let url = state.document?.url else { return [] }
+                // Keyed on `opened.url`, not `document?.url` — the screen knows which file
+                // it is for before the load lands, and the watch has nothing to re-key
+                // afterwards. Switching articles builds a *new* screen, so the old
+                // subscription is torn down with the stack element it belonged to.
+                let url = state.opened.url
                 return [env.watchFile(url).asChannel(id: "file-watch-\(url.path)", { (_: FileWatchEvent) in Action.fileChangedOnDisk })]
             }
         }

@@ -26,7 +26,6 @@ public struct ArticleEditorView: View {
             allBlockKinds: viewStore.state.allBlockKinds,
             allSummaries: viewStore.state.allSummaries,
             hasUnsavedChanges: viewStore.state.hasUnsavedChanges,
-            isConfirmingDiscardOpen: viewStore.presence(.state(\.pendingOpenURL), dismiss: .cancelPendingOpen),
             // `.presence` only has overloads for `Optional<T>`/`Presentation<T>` state — for
             // a plain `Bool` like this, Swift still type-checks it via an implicit optional
             // promotion, but the resulting getter becomes "is this now-wrapped Bool non-nil,"
@@ -54,12 +53,12 @@ public struct ArticleEditorView: View {
             onRevert: { dispatch(.revertChanges) },
             onUndo: { dispatch(.undo) },
             onRedo: { dispatch(.redo) },
-            onConfirmDiscardAndOpen: { dispatch(.confirmDiscardAndOpen) },
             onKeepMine: { dispatch(.keepMine) },
             onReloadTheirs: { dispatch(.reloadTheirs) },
             onBuild: { dispatch(.build) },
             onRun: { dispatch(.run) },
             onOpenChat: { dispatch(.openChat) }
         )
+        .onAppear { dispatch(.onAppear) }
     }
 }

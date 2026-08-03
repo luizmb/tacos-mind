@@ -1,4 +1,5 @@
 import AppDomain
+import CoreFP
 import Foundation
 import ReactiveConcurrency
 import SwiftRex
@@ -12,6 +13,11 @@ public enum ArticleListFeature {
     public struct State: Sendable, Equatable {
         public var summaries: [ArticleSummary]
         public var searchText: String
+        /// Which row is highlighted. **Written only by the app's navigation reducer**,
+        /// which re-derives it from the stack in the same synchronous step that changes
+        /// the stack — so the highlight cannot disagree with what is actually open, and
+        /// this feature never has to guess. It is stored rather than derived in
+        /// `mapState` only because a feature's `mapState` cannot see the app's path.
         public var selectedSlug: String?
         /// `true` while the "New Article" name prompt is up — store state, not local
         /// SwiftUI `@State`, same convention as every other confirmation/prompt in this app.
@@ -41,17 +47,15 @@ public enum ArticleListFeature {
         case start
         case loaded(Result<[ArticleSummary], ArticleEditorError>)
         case setSearchText(String)
+        /// "Open this one." A pure intent: this feature has no idea what an editor is.
+        /// `AppFeature`'s fold turns it into a navigation push, whose payload is shaped
+        /// to match this one exactly so that wiring stays a single tacit line.
         case select(ArticleSummary)
         case requestNewArticle
         case setNewArticleName(String)
         case cancelNewArticle
         case confirmNewArticle
         case created(Result<ArticleSummary, ArticleEditorError>)
-        /// Not on `ViewAction` — `AppRootView` dispatches this directly (it holds the raw
-        /// `MainStoreType`, not a `ArticleListFeature`-scoped `ViewStore`) when the user
-        /// navigates back from the editor on iPhone, so the sidebar shows nothing
-        /// selected rather than stale-highlighting whatever was last open.
-        case clearSelection
     }
 
     public struct Environment: Sendable {
@@ -140,20 +144,12 @@ public enum ArticleListFeature {
             case .setSearchText(let text):
                 return .reduce { $0.searchText = text }
 
-            case .select(let summary):
-                // Set immediately (optimistically), in the same pass as the tap — not
-                // deferred until the editor confirms the document actually opened.
-                // `NavigationSplitView`'s compact-width (iPhone) push to the detail
-                // column is driven by this exact binding changing; waiting for the
-                // async open to confirm first (the previous approach) meant the
-                // selection update arrived a beat late and the push silently never
-                // fired — tapping an article did nothing. `selectionSyncBehavior`
-                // still re-asserts the confirmed slug once the open actually
-                // completes, which also self-corrects the rare case where a switch
-                // gets deferred/cancelled (an active chat session with unsaved
-                // turns) — a briefly-wrong highlight in that edge case is a much
-                // smaller problem than navigation never working at all.
-                return .reduce { $0.selectedSlug = summary.slug }
+            // Purely a trigger for `AppFeature`'s fold, which pushes the editor and
+            // re-derives `selectedSlug` from the stack in the same step. Setting the
+            // highlight here too would put two writers on one field — exactly the split
+            // that used to make the sidebar and the open article disagree.
+            case .select:
+                return .doNothing
 
             case .requestNewArticle:
                 return .reduce { state in
@@ -174,26 +170,28 @@ public enum ArticleListFeature {
                 }
                 return .produce { ctx in ctx.environment.createArticle(name).asEffect { Action.created($0) } }
 
-            // The actual "open it in the editor" step is a cross-feature concern (this
-            // feature doesn't know about `ArticleEditorFeature`) — handled by
-            // `AppFeature`'s `bridgeBehavior`, the same one `.select` already uses.
+            // A freshly created article opens exactly the way tapping it would — same
+            // action, same gates, same push. Routing it through `.select` rather than
+            // duplicating the app-level wiring means there is only ever one way in.
             case .created(.success(let summary)):
                 return .reduce { state in
                     state.isCreatingArticle = false
                     state.createError = nil
                     state.summaries.append(summary)
-                    // Same reasoning as `.select` above — set immediately so the
-                    // detail column actually pushes on iPhone once the bridge opens it.
-                    state.selectedSlug = summary.slug
                 }
+                .produce { _ in Self.immediateDispatch(.select(summary)) }
 
             case .created(.failure(let error)):
                 return .reduce { $0.createError = error.readableDescription }
-
-            case .clearSelection:
-                return .reduce { $0.selectedSlug = nil }
             }
         }
+    }
+
+    /// Fires `action` as an immediate follow-up dispatch from within a `.produce` step —
+    /// the same "wrap a pure value in a one-shot Effect" trick used elsewhere in the app.
+    private static func immediateDispatch(_ action: Action) -> Effect<Action> {
+        let transform: @Sendable (()) -> Action = const(action)
+        return Publisher<Void, Never>.just(()).asEffect(transform)
     }
 
     public typealias Content = ArticleListView

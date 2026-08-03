@@ -55,6 +55,7 @@ let package = Package(
                 "GeneratorCore",
                 .product(name: "CoreFP", package: "FP"),
                 .product(name: "CoreFPOperators", package: "FP"),
+                .product(name: "FPMacros", package: "FP"),
             ],
             path: "Sources/ArticleEditor/AppDomain",
             swiftSettings: [.swiftLanguageMode(.v6)]
@@ -182,6 +183,25 @@ let package = Package(
                 .product(name: "ReactiveConcurrency", package: "ReactiveConcurrency"),
             ],
             path: "Tests/FileWatchingTests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+
+        .testTarget(
+            name: "AppCoreTests",
+            dependencies: [
+                "AppCore",
+                "AppDomain",
+                "ArticleEditorFeature",
+                "ArticleListFeature",
+                "AIChatFeature",
+                "GitHubSyncFeature",
+                "GeneratorCore",
+                .product(name: "SwiftRex", package: "SwiftRex"),
+                .product(name: "SwiftRex.SwiftUI", package: "SwiftRex"),
+                .product(name: "SwiftRex.Testing", package: "SwiftRex"),
+                .product(name: "ReactiveConcurrency", package: "ReactiveConcurrency"),
+            ],
+            path: "Tests/AppCoreTests",
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
 

@@ -29,10 +29,13 @@ public struct AIChatView: View {
             onToggleListening: { dispatch(.toggleListening) },
             onToggleMute: { dispatch(.toggleMute) },
             onSaveToNotes: { dispatch(.saveToNotes) },
+            onClose: { dispatch(.close) },
             onConfirmCloseAndDiscard: { dispatch(.confirmCloseAndDiscard) },
             onConfirmCloseAndSave: { dispatch(.confirmCloseAndSave) }
         )
-        .onAppear { dispatch(.open) }
-        .onDisappear { dispatch(.close) }
+        // Only `onAppear`. The old `.onDisappear { .close }` made the panel's own
+        // lifecycle a second thing that could open and close it, racing the state that
+        // was supposed to be driving it; dismissal is now the app's job, always.
+        .onAppear { dispatch(.onAppear) }
     }
 }

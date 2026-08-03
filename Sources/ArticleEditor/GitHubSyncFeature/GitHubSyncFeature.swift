@@ -12,20 +12,21 @@ import SwiftUI
 @Feature(strategy: .observationSimple)
 public enum GitHubSyncFeature {
     public struct State: Sendable, Equatable {
-        /// Whether the settings/actions sheet is showing — store state, not local
-        /// SwiftUI `@State`, so `AppRootView` never owns a shadow copy of its own.
-        public var isPresented: Bool
+        /// The screens pushed inside this sheet — see ``GitHubSyncRoute``. Whether the
+        /// *sheet itself* is showing is not here: the app owns that, because a screen
+        /// that can present and dismiss itself is a second source of truth waiting to
+        /// disagree with the one SwiftUI is actually rendering.
+        public var path: [GitHubSyncRoute]
         /// True while `firstSyncDecided`'s automatic pull/commit is in flight — lets
         /// `pullApplied`/`committed` tell a first-link sync apart from a manual
         /// Pull/Commit tap, since only the former should auto-close the sheet.
         public var isPerformingFirstSync: Bool
         /// Non-nil ⇒ linked. Only one repo can be linked at a time; `branch` is the only
-        /// field editable afterward (see `isEditingBranch`) — changing `repoURL`/`token`
-        /// means unlinking and linking again.
+        /// field editable afterward (see `GitHubSyncRoute.editBranch`) — changing
+        /// `repoURL`/`token` means unlinking and linking again.
         public var settings: GitHubSettings?
 
         // Link setup (one-time, shown only while `settings == nil`).
-        public var isLinkPresented: Bool
         public var linkRepoInput: String
         public var linkBranchInput: String
         public var linkTokenInput: String
@@ -37,7 +38,6 @@ public enum GitHubSyncFeature {
         public var isUnlinking: Bool
 
         // Edit branch (the only mutation allowed on an already-linked repo).
-        public var isEditingBranch: Bool
         public var editBranchInput: String
         public var isSavingBranch: Bool
 
@@ -51,10 +51,9 @@ public enum GitHubSyncFeature {
         public var lastError: String?
 
         public init() {
-            isPresented = false
+            path = []
             isPerformingFirstSync = false
             settings = nil
-            isLinkPresented = false
             linkRepoInput = ""
             linkBranchInput = ""
             linkTokenInput = ""
@@ -62,7 +61,6 @@ public enum GitHubSyncFeature {
             linkError = nil
             isConfirmingUnlink = false
             isUnlinking = false
-            isEditingBranch = false
             editBranchInput = ""
             isSavingBranch = false
             isPulling = false
@@ -77,10 +75,16 @@ public enum GitHubSyncFeature {
 
     @Prisms
     public enum Action: Sendable {
-        /// Not on `ViewAction` — `AppRootView` dispatches this directly (it holds the raw
-        /// `MainStoreType`, not a `GitHubSyncFeature`-scoped `ViewStore`), the same way it
-        /// already drives the chat inspector's `.open`/`.close`.
-        case setPresented(Bool)
+        /// What the inner `NavigationStack`'s binding delivers for every interactive
+        /// change — the back button, the back-swipe — so user-driven and programmatic
+        /// navigation inside this sheet land in the same reducer.
+        case setPath([GitHubSyncRoute])
+        /// "I'd like to be closed." A pure intent, bridged by `AppFeature`: only the app
+        /// owns this sheet's presentation.
+        case requestClose
+        /// A freshly-linked repo finished its automatic first sync. Also a pure intent —
+        /// the reason to close is known here, the ability to close is not.
+        case firstSyncCompleted
         case loadSettings
         case settingsLoaded(GitHubSettings?)
 
@@ -152,11 +156,11 @@ public enum GitHubSyncFeature {
     }
 
     public struct ViewState: Sendable, Equatable {
+        public var path: [GitHubSyncRoute]
         public var isConfigured: Bool
         public var repoURL: String
         public var branch: String
 
-        public var isLinkPresented: Bool
         public var linkRepoInput: String
         public var linkBranchInput: String
         public var linkTokenInput: String
@@ -166,7 +170,6 @@ public enum GitHubSyncFeature {
         public var isConfirmingUnlink: Bool
         public var isUnlinking: Bool
 
-        public var isEditingBranch: Bool
         public var editBranchInput: String
         public var isSavingBranch: Bool
 
@@ -182,6 +185,8 @@ public enum GitHubSyncFeature {
     @Prisms
     public enum ViewAction: Sendable {
         case loadSettings
+        case setPath([GitHubSyncRoute])
+        case requestClose
         case requestLink
         case cancelLink
         case setLinkRepoInput(String)
@@ -205,10 +210,10 @@ public enum GitHubSyncFeature {
     public static let mapState = Reader<Environment, @MainActor @Sendable (State) -> ViewState> { _ in
         { state in
             ViewState(
+                path: state.path,
                 isConfigured: state.settings != nil,
                 repoURL: state.settings?.repoURL ?? "",
                 branch: state.settings?.branch ?? "",
-                isLinkPresented: state.isLinkPresented,
                 linkRepoInput: state.linkRepoInput,
                 linkBranchInput: state.linkBranchInput,
                 linkTokenInput: state.linkTokenInput,
@@ -216,7 +221,6 @@ public enum GitHubSyncFeature {
                 linkError: state.linkError,
                 isConfirmingUnlink: state.isConfirmingUnlink,
                 isUnlinking: state.isUnlinking,
-                isEditingBranch: state.isEditingBranch,
                 editBranchInput: state.editBranchInput,
                 isSavingBranch: state.isSavingBranch,
                 isPulling: state.isPulling,
@@ -234,6 +238,8 @@ public enum GitHubSyncFeature {
         { viewAction in
             switch viewAction {
             case .loadSettings: .loadSettings
+            case .setPath(let routes): .setPath(routes)
+            case .requestClose: .requestClose
             case .requestLink: .requestLink
             case .cancelLink: .cancelLink
             case .setLinkRepoInput(let value): .setLinkRepoInput(value)
@@ -264,8 +270,13 @@ public enum GitHubSyncFeature {
     public static func behavior() -> Behavior<Action, State, Environment> {
         .handle { action, context in
             switch action {
-            case .setPresented(let value):
-                return .reduce { $0.isPresented = value }
+            case .setPath(let routes):
+                return .reduce { $0.path = routes }
+
+            // Both are pure triggers for `AppFeature`'s fold, which owns this sheet's
+            // presentation — same shape as `ArticleEditorFeature.openChat`.
+            case .requestClose, .firstSyncCompleted:
+                return .doNothing
 
             case .loadSettings:
                 return .produce { ctx in ctx.environment.loadGitHubSettings().asEffect { Action.settingsLoaded($0) } }
@@ -273,9 +284,12 @@ public enum GitHubSyncFeature {
             case .settingsLoaded(let settings):
                 return .reduce { $0.settings = settings }
 
+            // Clearing the form on the way in is what lets the inputs stay flat fields
+            // rather than travelling in the path element: a pushed screen always starts
+            // empty, so leftovers from a previous visit are unobservable.
             case .requestLink:
                 return .reduce { state in
-                    state.isLinkPresented = true
+                    state.path = [.link]
                     state.linkRepoInput = ""
                     state.linkBranchInput = "main"
                     state.linkTokenInput = ""
@@ -283,7 +297,7 @@ public enum GitHubSyncFeature {
                 }
 
             case .cancelLink:
-                return .reduce { $0.isLinkPresented = false }
+                return .reduce { $0.path = [] }
 
             case .setLinkRepoInput(let value):
                 return .reduce { $0.linkRepoInput = value }
@@ -314,7 +328,7 @@ public enum GitHubSyncFeature {
                 return .reduce { state in
                     state.settings = settings
                     state.isLinking = false
-                    state.isLinkPresented = false
+                    state.path = []
                     state.linkRepoInput = ""
                     state.linkBranchInput = ""
                     state.linkTokenInput = ""
@@ -384,12 +398,12 @@ public enum GitHubSyncFeature {
             case .requestEditBranch:
                 guard let settings = context.stateBefore?.settings else { return .doNothing }
                 return .reduce { state in
-                    state.isEditingBranch = true
+                    state.path = [.editBranch]
                     state.editBranchInput = settings.branch
                 }
 
             case .cancelEditBranch:
-                return .reduce { $0.isEditingBranch = false }
+                return .reduce { $0.path = [] }
 
             case .setEditBranchInput(let value):
                 return .reduce { $0.editBranchInput = value }
@@ -406,7 +420,7 @@ public enum GitHubSyncFeature {
             case .branchUpdated(.success(let branch)):
                 return .reduce { state in
                     state.isSavingBranch = false
-                    state.isEditingBranch = false
+                    state.path = []
                     state.settings?.branch = branch
                 }
 
@@ -456,13 +470,14 @@ public enum GitHubSyncFeature {
                 }
 
             case .pullApplied(.success):
+                guard context.stateBefore?.isPerformingFirstSync == true else {
+                    return .reduce { $0.isPulling = false }
+                }
                 return .reduce { state in
                     state.isPulling = false
-                    if state.isPerformingFirstSync {
-                        state.isPerformingFirstSync = false
-                        state.isPresented = false
-                    }
+                    state.isPerformingFirstSync = false
                 }
+                .produce { _ in Self.immediateDispatch(.firstSyncCompleted) }
 
             case .pullApplied(.failure(let error)):
                 return .reduce { state in
@@ -482,14 +497,18 @@ public enum GitHubSyncFeature {
                 .produce { ctx in ctx.environment.commitLocalChanges(settings).asEffect { Action.committed($0) } }
 
             case .committed(.success(let outcome)):
+                guard context.stateBefore?.isPerformingFirstSync == true else {
+                    return .reduce { state in
+                        state.isCommitting = false
+                        state.lastCommitOutcome = outcome
+                    }
+                }
                 return .reduce { state in
                     state.isCommitting = false
                     state.lastCommitOutcome = outcome
-                    if state.isPerformingFirstSync {
-                        state.isPerformingFirstSync = false
-                        state.isPresented = false
-                    }
+                    state.isPerformingFirstSync = false
                 }
+                .produce { _ in Self.immediateDispatch(.firstSyncCompleted) }
 
             case .committed(.failure(let error)):
                 return .reduce { state in
@@ -521,6 +540,13 @@ public enum GitHubSyncFeature {
                 }
             }
         }
+    }
+
+    /// Fires `action` as an immediate follow-up dispatch from within a `.produce` step —
+    /// the same "wrap a pure value in a one-shot Effect" trick used elsewhere in the app.
+    private static func immediateDispatch(_ action: Action) -> Effect<Action> {
+        let transform: @Sendable (()) -> Action = const(action)
+        return Publisher<Void, Never>.just(()).asEffect(transform)
     }
 
     public typealias Content = GitHubSyncView

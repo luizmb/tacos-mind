@@ -9,6 +9,7 @@ public struct GitHubSyncView: View {
         // bare-referenced — see ArticleEditorView for the same unavoidable closure.
         let dispatch: (GitHubSyncFeature.ViewAction) -> Void = { viewStore.dispatch($0) }
         GitHubSyncContent(
+            path: viewStore.binding(.state(\.path), dispatch: .action(\.setPath)),
             isConfigured: viewStore.state.isConfigured,
             repoURL: viewStore.state.repoURL,
             branch: viewStore.state.branch,
@@ -19,7 +20,14 @@ public struct GitHubSyncView: View {
             isOpeningPR: viewStore.state.isOpeningPR,
             lastPRURL: viewStore.state.lastPRURL,
             lastError: viewStore.state.lastError,
+            // A genuine `Optional` — `.presence` is correct here, and `pendingPullPreview`
+            // is the *only* field in this feature it was ever correct for. The three
+            // sibling calls that used to sit alongside it were reading plain `Bool`s,
+            // which `.presence` silently promotes to `Bool?`, making the getter
+            // `Optional(false) != nil` — permanently true. Those flags are gone: two are
+            // pushed routes now, and the third uses `.binding`.
             isConfirmingPull: viewStore.presence(.state(\.pendingPullPreview), dismiss: .cancelPull),
+            onDone: { dispatch(.requestClose) },
             onRequestLink: { dispatch(.requestLink) },
             onRequestUnlink: { dispatch(.requestUnlink) },
             onRequestEditBranch: { dispatch(.requestEditBranch) },
@@ -27,10 +35,13 @@ public struct GitHubSyncView: View {
             onConfirmPull: { dispatch(.confirmPull) },
             onCommit: { dispatch(.commit) },
             onOpenPR: { dispatch(.openPR) },
-            isConfirmingUnlink: viewStore.presence(.state(\.isConfirmingUnlink), dismiss: .cancelUnlink),
+            isConfirmingUnlink: viewStore.binding(
+                .state(\.isConfirmingUnlink),
+                dispatch: .action(review: { _ in .cancelUnlink })
+            ),
             isUnlinking: viewStore.state.isUnlinking,
             onConfirmUnlink: { dispatch(.confirmUnlink) },
-            linkSheet: LinkRepositoryContent(
+            linkScreen: LinkRepositoryContent(
                 repoInput: viewStore.binding(.state(\.linkRepoInput), dispatch: .action(\.setLinkRepoInput)),
                 branchInput: viewStore.binding(.state(\.linkBranchInput), dispatch: .action(\.setLinkBranchInput)),
                 tokenInput: viewStore.binding(.state(\.linkTokenInput), dispatch: .action(\.setLinkTokenInput)),
@@ -39,14 +50,12 @@ public struct GitHubSyncView: View {
                 onCancel: { dispatch(.cancelLink) },
                 onConfirm: { dispatch(.confirmLink) }
             ),
-            isLinkPresented: viewStore.presence(.state(\.isLinkPresented), dismiss: .cancelLink),
-            editBranchSheet: EditBranchContent(
+            editBranchScreen: EditBranchContent(
                 branchInput: viewStore.binding(.state(\.editBranchInput), dispatch: .action(\.setEditBranchInput)),
                 isSaving: viewStore.state.isSavingBranch,
                 onCancel: { dispatch(.cancelEditBranch) },
                 onConfirm: { dispatch(.confirmEditBranch) }
-            ),
-            isEditingBranch: viewStore.presence(.state(\.isEditingBranch), dismiss: .cancelEditBranch)
+            )
         )
         .onAppear { dispatch(.loadSettings) }
     }
