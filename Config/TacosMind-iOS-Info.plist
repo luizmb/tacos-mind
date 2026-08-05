@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	This file exists for exactly one key. Everything else in the app's Info.plist is
+	still generated (GENERATE_INFOPLIST_FILE = YES) from INFOPLIST_KEY_* build settings
+	in the pbxproj — when INFOPLIST_FILE is also set, Xcode merges the generated keys on
+	top of this file rather than replacing it, so this stays a one-key supplement.
+
+	UIFileSharingEnabled has no INFOPLIST_KEY_ equivalent: Xcode only honours the fixed
+	allowlist of INFOPLIST_KEY_* settings declared in its CoreBuildSystem.xcspec, and
+	that key isn't in it (LSSupportsOpeningDocumentsInPlace is, which is why only half
+	of the pair used to reach the built app — the app browsed documents in place but
+	never appeared under "On My iPhone" in Files). An unrecognised INFOPLIST_KEY_ is
+	dropped silently, with no build warning, so this needs to be a real plist entry.
+
+	Both keys together are what exposes the app's Documents directory in Files.app.
+	-->
+	<key>UIFileSharingEnabled</key>
+	<true/>
+</dict>
+</plist>
