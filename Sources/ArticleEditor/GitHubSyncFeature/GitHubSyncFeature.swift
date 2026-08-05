@@ -17,12 +17,14 @@ public enum GitHubSyncFeature {
         /// that can present and dismiss itself is a second source of truth waiting to
         /// disagree with the one SwiftUI is actually rendering.
         public var path: [GitHubSyncRoute]
-        /// True while `firstSyncDecided`'s automatic pull/commit is in flight — lets
-        /// `pullApplied`/`committed` tell a first-link sync apart from a manual
-        /// Pull/Commit tap, since only the former should auto-close the sheet.
+        /// True while `firstSyncDecided`'s automatic first sync is in flight — lets
+        /// `pullApplied`/`pushed` tell a first-link sync apart from a manual Pull/Push tap,
+        /// since only the former should auto-close the sheet. It survives across the push
+        /// *form*, because a first sync with local content now ends at a form the user has
+        /// to confirm rather than a commit that fires by itself.
         public var isPerformingFirstSync: Bool
-        /// Non-nil ⇒ linked. Only one repo can be linked at a time; `branch` is the only
-        /// field editable afterward (see `GitHubSyncRoute.editBranch`) — changing
+        /// Non-nil ⇒ linked. Only one repo can be linked at a time; `baseBranch` is the
+        /// only field editable afterward (see `GitHubSyncRoute.editBranch`) — changing
         /// `repoURL`/`token` means unlinking and linking again.
         public var settings: GitHubSettings?
 
@@ -42,12 +44,27 @@ public enum GitHubSyncFeature {
         public var isSavingBranch: Bool
 
         public var isPulling: Bool
-        /// Non-nil ⇒ the "this will overwrite local changes" confirmation is up.
-        public var pendingPullPreview: PullPreview?
-        public var isCommitting: Bool
-        public var lastCommitOutcome: CommitOutcome?
-        public var isOpeningPR: Bool
-        public var lastPRURL: URL?
+        /// What the last pull did, including anything it deliberately left alone.
+        public var lastPullOutcome: PullOutcome?
+        /// Non-nil ⇒ the last pull skipped locally-modified files, and these are the remote
+        /// bytes it declined to write. Held so `overwriteKeptLocal` can apply them without
+        /// a second round-trip; it is the *only* thing keeping the discard option live.
+        public var overwritablePull: PullPreview?
+        /// Non-nil ⇒ the "discard your local changes?" confirmation is up. Store-owned like
+        /// `isConfirmingUnlink`, for the same reason: the two destructive actions in this
+        /// feature both gate on state the reducer can see, not on view-local flags.
+        public var isConfirmingOverwrite: Bool
+
+        public var isPushing: Bool
+        public var lastPushOutcome: PushOutcome?
+        /// The local bytes a push is about to send, captured at preview time so confirming
+        /// the form doesn't re-read the disk (and can't pick up an edit made mid-form).
+        public var pendingPushPreview: PushPreview?
+        public var pushBranchInput: String
+        public var pushCommitMessageInput: String
+        public var pushPRTitleInput: String
+        public var pushPRBodyInput: String
+
         public var lastError: String?
 
         public init() {
@@ -64,11 +81,16 @@ public enum GitHubSyncFeature {
             editBranchInput = ""
             isSavingBranch = false
             isPulling = false
-            pendingPullPreview = nil
-            isCommitting = false
-            lastCommitOutcome = nil
-            isOpeningPR = false
-            lastPRURL = nil
+            lastPullOutcome = nil
+            overwritablePull = nil
+            isConfirmingOverwrite = false
+            isPushing = false
+            lastPushOutcome = nil
+            pendingPushPreview = nil
+            pushBranchInput = ""
+            pushCommitMessageInput = ""
+            pushPRTitleInput = ""
+            pushPRBodyInput = ""
             lastError = nil
         }
     }
@@ -112,13 +134,23 @@ public enum GitHubSyncFeature {
 
         case pull
         case pullPreviewed(Result<PullPreview, GitHubError>)
-        case confirmPull
-        case cancelPull
-        case pullApplied(Result<Int, GitHubError>)
-        case commit
-        case committed(Result<CommitOutcome, GitHubError>)
-        case openPR
-        case prOpened(Result<URL, GitHubError>)
+        case pullApplied(Result<PullOutcome, GitHubError>)
+        case requestOverwriteKeptLocal
+        case cancelOverwriteKeptLocal
+        /// Discards the local edits the last pull preserved, replacing them with the remote
+        /// bytes already sitting in `overwritablePull`. The one destructive path in a pull,
+        /// and never automatic.
+        case overwriteKeptLocal
+
+        case push
+        case pushPreviewed(Result<PushPreview, GitHubError>)
+        case setPushBranchInput(String)
+        case setPushCommitMessageInput(String)
+        case setPushPRTitleInput(String)
+        case setPushPRBodyInput(String)
+        case confirmPush
+        case cancelPush
+        case pushed(Result<PushOutcome, GitHubError>)
     }
 
     public struct Environment: Sendable {
@@ -129,8 +161,8 @@ public enum GitHubSyncFeature {
         public let isArticlesDirEmpty: @Sendable () -> Publisher<Bool, Never>
         public let previewPull: @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError>
         public let applyPull: @Sendable (PullPreview) -> Publisher<Int, GitHubError>
-        public let commitLocalChanges: @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError>
-        public let openPullRequest: @Sendable (GitHubSettings) -> Publisher<URL, GitHubError>
+        public let previewPush: @Sendable (GitHubSettings) -> Publisher<PushPreview, GitHubError>
+        public let performPush: @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError>
 
         public init(
             loadGitHubSettings: @escaping @Sendable () -> Publisher<GitHubSettings?, Never>,
@@ -140,8 +172,8 @@ public enum GitHubSyncFeature {
             isArticlesDirEmpty: @escaping @Sendable () -> Publisher<Bool, Never>,
             previewPull: @escaping @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError>,
             applyPull: @escaping @Sendable (PullPreview) -> Publisher<Int, GitHubError>,
-            commitLocalChanges: @escaping @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError>,
-            openPullRequest: @escaping @Sendable (GitHubSettings) -> Publisher<URL, GitHubError>
+            previewPush: @escaping @Sendable (GitHubSettings) -> Publisher<PushPreview, GitHubError>,
+            performPush: @escaping @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError>
         ) {
             self.loadGitHubSettings = loadGitHubSettings
             self.linkRepository = linkRepository
@@ -150,8 +182,8 @@ public enum GitHubSyncFeature {
             self.isArticlesDirEmpty = isArticlesDirEmpty
             self.previewPull = previewPull
             self.applyPull = applyPull
-            self.commitLocalChanges = commitLocalChanges
-            self.openPullRequest = openPullRequest
+            self.previewPush = previewPush
+            self.performPush = performPush
         }
     }
 
@@ -159,7 +191,7 @@ public enum GitHubSyncFeature {
         public var path: [GitHubSyncRoute]
         public var isConfigured: Bool
         public var repoURL: String
-        public var branch: String
+        public var baseBranch: String
 
         public var linkRepoInput: String
         public var linkBranchInput: String
@@ -174,11 +206,22 @@ public enum GitHubSyncFeature {
         public var isSavingBranch: Bool
 
         public var isPulling: Bool
-        public var pendingPullPreview: PullPreview?
-        public var isCommitting: Bool
-        public var lastCommitOutcome: CommitOutcome?
-        public var isOpeningPR: Bool
-        public var lastPRURL: URL?
+        public var lastPullOutcome: PullOutcome?
+        /// Only whether the discard option is available — the view has no use for the
+        /// bytes themselves, just the names, which `lastPullOutcome.keptLocal` already has.
+        public var canOverwriteKeptLocal: Bool
+        public var isConfirmingOverwrite: Bool
+
+        public var isPushing: Bool
+        public var lastPushOutcome: PushOutcome?
+        public var pushBranchInput: String
+        public var pushCommitMessageInput: String
+        public var pushPRTitleInput: String
+        public var pushPRBodyInput: String
+        /// How many articles the pending push would send — the form's footer copy, and the
+        /// only thing the view needs from `pendingPushPreview`.
+        public var pushFileCount: Int
+
         public var lastError: String?
     }
 
@@ -201,10 +244,16 @@ public enum GitHubSyncFeature {
         case setEditBranchInput(String)
         case confirmEditBranch
         case pull
-        case confirmPull
-        case cancelPull
-        case commit
-        case openPR
+        case requestOverwriteKeptLocal
+        case cancelOverwriteKeptLocal
+        case overwriteKeptLocal
+        case push
+        case setPushBranchInput(String)
+        case setPushCommitMessageInput(String)
+        case setPushPRTitleInput(String)
+        case setPushPRBodyInput(String)
+        case confirmPush
+        case cancelPush
     }
 
     public static let mapState = Reader<Environment, @MainActor @Sendable (State) -> ViewState> { _ in
@@ -213,7 +262,7 @@ public enum GitHubSyncFeature {
                 path: state.path,
                 isConfigured: state.settings != nil,
                 repoURL: state.settings?.repoURL ?? "",
-                branch: state.settings?.branch ?? "",
+                baseBranch: state.settings?.baseBranch ?? "",
                 linkRepoInput: state.linkRepoInput,
                 linkBranchInput: state.linkBranchInput,
                 linkTokenInput: state.linkTokenInput,
@@ -224,11 +273,16 @@ public enum GitHubSyncFeature {
                 editBranchInput: state.editBranchInput,
                 isSavingBranch: state.isSavingBranch,
                 isPulling: state.isPulling,
-                pendingPullPreview: state.pendingPullPreview,
-                isCommitting: state.isCommitting,
-                lastCommitOutcome: state.lastCommitOutcome,
-                isOpeningPR: state.isOpeningPR,
-                lastPRURL: state.lastPRURL,
+                lastPullOutcome: state.lastPullOutcome,
+                canOverwriteKeptLocal: state.overwritablePull != nil,
+                isConfirmingOverwrite: state.isConfirmingOverwrite,
+                isPushing: state.isPushing,
+                lastPushOutcome: state.lastPushOutcome,
+                pushBranchInput: state.pushBranchInput,
+                pushCommitMessageInput: state.pushCommitMessageInput,
+                pushPRTitleInput: state.pushPRTitleInput,
+                pushPRBodyInput: state.pushPRBodyInput,
+                pushFileCount: state.pendingPushPreview?.files.count ?? 0,
                 lastError: state.lastError
             )
         }
@@ -254,10 +308,16 @@ public enum GitHubSyncFeature {
             case .setEditBranchInput(let value): .setEditBranchInput(value)
             case .confirmEditBranch: .confirmEditBranch
             case .pull: .pull
-            case .confirmPull: .confirmPull
-            case .cancelPull: .cancelPull
-            case .commit: .commit
-            case .openPR: .openPR
+            case .requestOverwriteKeptLocal: .requestOverwriteKeptLocal
+            case .cancelOverwriteKeptLocal: .cancelOverwriteKeptLocal
+            case .overwriteKeptLocal: .overwriteKeptLocal
+            case .push: .push
+            case .setPushBranchInput(let value): .setPushBranchInput(value)
+            case .setPushCommitMessageInput(let value): .setPushCommitMessageInput(value)
+            case .setPushPRTitleInput(let value): .setPushPRTitleInput(value)
+            case .setPushPRBodyInput(let value): .setPushPRBodyInput(value)
+            case .confirmPush: .confirmPush
+            case .cancelPush: .cancelPush
             }
         }
     }
@@ -313,7 +373,11 @@ public enum GitHubSyncFeature {
                 guard !state.linkRepoInput.isEmpty, !state.linkBranchInput.isEmpty, !state.linkTokenInput.isEmpty else {
                     return .reduce { $0.linkError = "Fill in the repo, branch, and token." }
                 }
-                let settings = GitHubSettings(repoURL: state.linkRepoInput, branch: state.linkBranchInput, token: state.linkTokenInput)
+                let settings = GitHubSettings(
+                    repoURL: state.linkRepoInput,
+                    baseBranch: state.linkBranchInput,
+                    token: state.linkTokenInput
+                )
                 return .reduce { state in
                     state.isLinking = true
                     state.linkError = nil
@@ -346,10 +410,14 @@ public enum GitHubSyncFeature {
                 }
 
             // A freshly-linked repo's first sync: an empty local Articles/ pulls remote
-            // content down (nothing local to lose); a non-empty one pushes local up
-            // instead of destructively overwriting it — reuses the exact same
-            // preview/commit machinery + reducers as a manual Pull/Commit tap, so the
-            // linked screen's own busy/outcome UI just works for this automatic step too.
+            // content down (nothing local to lose); a non-empty one heads for a push
+            // instead of destructively overwriting it. Both reuse the exact same
+            // preview machinery + reducers as a manual Pull/Push tap, so the linked
+            // screen's busy/outcome UI just works for this automatic step too.
+            //
+            // The push arm stops at the form rather than pushing outright — a first link
+            // shouldn't invent a branch name, a commit message and a PR body on the user's
+            // behalf and open a pull request before they've seen any of it.
             case .firstSyncDecided(let isEmpty, let settings):
                 if isEmpty {
                     return .reduce { state in
@@ -360,11 +428,11 @@ public enum GitHubSyncFeature {
                     .produce { ctx in ctx.environment.previewPull(settings).asEffect { Action.pullPreviewed($0) } }
                 } else {
                     return .reduce { state in
-                        state.isCommitting = true
+                        state.isPushing = true
                         state.isPerformingFirstSync = true
                         state.lastError = nil
                     }
-                    .produce { ctx in ctx.environment.commitLocalChanges(settings).asEffect { Action.committed($0) } }
+                    .produce { ctx in ctx.environment.previewPush(settings).asEffect { Action.pushPreviewed($0) } }
                 }
 
             case .requestUnlink:
@@ -384,9 +452,11 @@ public enum GitHubSyncFeature {
                 return .reduce { state in
                     state.isUnlinking = false
                     state.settings = nil
-                    state.lastCommitOutcome = nil
-                    state.lastPRURL = nil
-                    state.pendingPullPreview = nil
+                    state.lastPullOutcome = nil
+                    state.overwritablePull = nil
+                    state.isConfirmingOverwrite = false
+                    state.lastPushOutcome = nil
+                    state.pendingPushPreview = nil
                 }
 
             case .unlinked(.failure(let error)):
@@ -399,7 +469,7 @@ public enum GitHubSyncFeature {
                 guard let settings = context.stateBefore?.settings else { return .doNothing }
                 return .reduce { state in
                     state.path = [.editBranch]
-                    state.editBranchInput = settings.branch
+                    state.editBranchInput = settings.baseBranch
                 }
 
             case .cancelEditBranch:
@@ -421,7 +491,7 @@ public enum GitHubSyncFeature {
                 return .reduce { state in
                     state.isSavingBranch = false
                     state.path = []
-                    state.settings?.branch = branch
+                    state.settings?.baseBranch = branch
                 }
 
             case .branchUpdated(.failure(let error)):
@@ -436,20 +506,28 @@ public enum GitHubSyncFeature {
                 }
                 return .reduce { state in
                     state.isPulling = true
+                    state.lastPullOutcome = nil
+                    state.overwritablePull = nil
+                    state.isConfirmingOverwrite = false
                     state.lastError = nil
                 }
                 .produce { ctx in ctx.environment.previewPull(settings).asEffect { Action.pullPreviewed($0) } }
 
+            // Local always wins, so a pull never stops to ask: `toAdd` (nothing local to
+            // lose) is applied immediately and `toUpdate` is dropped from what gets
+            // written. The remote bytes for those files aren't thrown away though — they
+            // stay in `overwritablePull`, which is what makes the discard option on the
+            // next screen instant rather than another round-trip.
             case .pullPreviewed(.success(let preview)):
-                guard preview.localOnlyChanges.isEmpty else {
-                    return .reduce { state in
-                        state.isPulling = false
-                        state.isPerformingFirstSync = false
-                        state.pendingPullPreview = preview
+                let keepLocal = preview.toUpdate.isEmpty ? nil : preview
+                let keptNames = preview.toUpdate.map(\.name)
+                let applying = PullPreview(toAdd: preview.toAdd, toUpdate: [])
+                return .reduce { $0.overwritablePull = keepLocal }
+                    .produce { ctx in
+                        ctx.environment.applyPull(applying).asEffect { (result: Result<Int, GitHubError>) in
+                            Action.pullApplied(result.map { PullOutcome(applied: $0, keptLocal: keptNames) })
+                        }
                     }
-                }
-                return .reduce { $0.pendingPullPreview = nil }
-                    .produce { ctx in ctx.environment.applyPull(preview).asEffect { Action.pullApplied($0) } }
 
             case .pullPreviewed(.failure(let error)):
                 return .reduce { state in
@@ -458,23 +536,40 @@ public enum GitHubSyncFeature {
                     state.lastError = error.readableDescription
                 }
 
-            case .confirmPull:
-                guard let preview = context.stateBefore?.pendingPullPreview else { return .doNothing }
-                return .reduce { $0.pendingPullPreview = nil }
-                    .produce { ctx in ctx.environment.applyPull(preview).asEffect { Action.pullApplied($0) } }
+            // Applies the whole retained preview, `toUpdate` included — the one place local
+            // edits are discarded. `keptLocal` is empty by construction: nothing is being
+            // held back this time, which is what takes the discard option back off screen.
+            case .requestOverwriteKeptLocal:
+                guard context.stateBefore?.overwritablePull != nil else { return .doNothing }
+                return .reduce { $0.isConfirmingOverwrite = true }
 
-            case .cancelPull:
+            case .cancelOverwriteKeptLocal:
+                return .reduce { $0.isConfirmingOverwrite = false }
+
+            case .overwriteKeptLocal:
+                guard let preview = context.stateBefore?.overwritablePull else { return .doNothing }
                 return .reduce { state in
-                    state.pendingPullPreview = nil
-                    state.isPulling = false
+                    state.isPulling = true
+                    state.isConfirmingOverwrite = false
+                    state.overwritablePull = nil
+                    state.lastError = nil
+                }
+                .produce { ctx in
+                    ctx.environment.applyPull(preview).asEffect { (result: Result<Int, GitHubError>) in
+                        Action.pullApplied(result.map { PullOutcome(applied: $0, keptLocal: []) })
+                    }
                 }
 
-            case .pullApplied(.success):
+            case .pullApplied(.success(let outcome)):
                 guard context.stateBefore?.isPerformingFirstSync == true else {
-                    return .reduce { $0.isPulling = false }
+                    return .reduce { state in
+                        state.isPulling = false
+                        state.lastPullOutcome = outcome
+                    }
                 }
                 return .reduce { state in
                     state.isPulling = false
+                    state.lastPullOutcome = outcome
                     state.isPerformingFirstSync = false
                 }
                 .produce { _ in Self.immediateDispatch(.firstSyncCompleted) }
@@ -486,60 +581,125 @@ public enum GitHubSyncFeature {
                     state.lastError = error.readableDescription
                 }
 
-            case .commit:
+            case .push:
                 guard let settings = context.stateBefore?.settings else {
                     return .reduce { $0.lastError = GitHubError.notConfigured.readableDescription }
                 }
                 return .reduce { state in
-                    state.isCommitting = true
+                    state.isPushing = true
+                    state.lastPushOutcome = nil
                     state.lastError = nil
                 }
-                .produce { ctx in ctx.environment.commitLocalChanges(settings).asEffect { Action.committed($0) } }
+                .produce { ctx in ctx.environment.previewPush(settings).asEffect { Action.pushPreviewed($0) } }
 
-            case .committed(.success(let outcome)):
+            // Nothing dirty short-circuits before the form: a form whose only possible
+            // outcome is "nothing to push" is a form worth not showing. Otherwise every
+            // field is seeded here — the branch name from the preview (the one piece that
+            // needed a clock), the rest derived from the file list.
+            case .pushPreviewed(.success(let preview)):
+                guard !preview.files.isEmpty else {
+                    return .reduce { state in
+                        state.isPushing = false
+                        state.isPerformingFirstSync = false
+                        state.lastPushOutcome = .nothingToPush
+                    }
+                }
+                let summary = Self.pushSummary(preview.files.count)
+                return .reduce { state in
+                    state.isPushing = false
+                    state.pendingPushPreview = preview
+                    state.pushBranchInput = preview.suggestedBranch
+                    state.pushCommitMessageInput = summary
+                    state.pushPRTitleInput = summary
+                    state.pushPRBodyInput = preview.files.map { "- \($0.name)" }.joined(separator: "\n")
+                    state.path = [.push]
+                }
+
+            case .pushPreviewed(.failure(let error)):
+                return .reduce { state in
+                    state.isPushing = false
+                    state.isPerformingFirstSync = false
+                    state.lastError = error.readableDescription
+                }
+
+            case .setPushBranchInput(let value):
+                return .reduce { $0.pushBranchInput = value }
+
+            case .setPushCommitMessageInput(let value):
+                return .reduce { $0.pushCommitMessageInput = value }
+
+            case .setPushPRTitleInput(let value):
+                return .reduce { $0.pushPRTitleInput = value }
+
+            case .setPushPRBodyInput(let value):
+                return .reduce { $0.pushPRBodyInput = value }
+
+            case .confirmPush:
+                guard
+                    let state = context.stateBefore,
+                    let settings = state.settings,
+                    let preview = state.pendingPushPreview,
+                    !state.pushBranchInput.isEmpty
+                else {
+                    return .doNothing
+                }
+                let request = PushRequest(
+                    branch: state.pushBranchInput,
+                    commitMessage: state.pushCommitMessageInput,
+                    prTitle: state.pushPRTitleInput,
+                    prBody: state.pushPRBodyInput
+                )
+                return .reduce { state in
+                    state.isPushing = true
+                    state.lastError = nil
+                }
+                .produce { ctx in
+                    ctx.environment.performPush(settings, request, preview).asEffect { Action.pushed($0) }
+                }
+
+            case .cancelPush:
+                return .reduce { state in
+                    state.path = []
+                    state.pendingPushPreview = nil
+                    state.isPushing = false
+                    state.isPerformingFirstSync = false
+                }
+
+            case .pushed(.success(let outcome)):
                 guard context.stateBefore?.isPerformingFirstSync == true else {
                     return .reduce { state in
-                        state.isCommitting = false
-                        state.lastCommitOutcome = outcome
+                        state.isPushing = false
+                        state.lastPushOutcome = outcome
+                        state.pendingPushPreview = nil
+                        state.path = []
                     }
                 }
                 return .reduce { state in
-                    state.isCommitting = false
-                    state.lastCommitOutcome = outcome
+                    state.isPushing = false
+                    state.lastPushOutcome = outcome
+                    state.pendingPushPreview = nil
+                    state.path = []
                     state.isPerformingFirstSync = false
                 }
                 .produce { _ in Self.immediateDispatch(.firstSyncCompleted) }
 
-            case .committed(.failure(let error)):
+            // The form stays up on failure, inputs intact, so a rejected branch name or a
+            // dropped connection is one correction away from retrying.
+            case .pushed(.failure(let error)):
                 return .reduce { state in
-                    state.isCommitting = false
+                    state.isPushing = false
                     state.isPerformingFirstSync = false
-                    state.lastError = error.readableDescription
-                }
-
-            case .openPR:
-                guard let settings = context.stateBefore?.settings else {
-                    return .reduce { $0.lastError = GitHubError.notConfigured.readableDescription }
-                }
-                return .reduce { state in
-                    state.isOpeningPR = true
-                    state.lastError = nil
-                }
-                .produce { ctx in ctx.environment.openPullRequest(settings).asEffect { Action.prOpened($0) } }
-
-            case .prOpened(.success(let url)):
-                return .reduce { state in
-                    state.isOpeningPR = false
-                    state.lastPRURL = url
-                }
-
-            case .prOpened(.failure(let error)):
-                return .reduce { state in
-                    state.isOpeningPR = false
                     state.lastError = error.readableDescription
                 }
             }
         }
+    }
+
+    /// The default commit message and PR title for a push of `count` articles. Pure, and
+    /// deliberately the same string for both: they're one thought, and anyone who wants
+    /// them to differ can edit either field.
+    private static func pushSummary(_ count: Int) -> String {
+        "Update \(count) article\(count == 1 ? "" : "s")"
     }
 
     /// Fires `action` as an immediate follow-up dispatch from within a `.produce` step —

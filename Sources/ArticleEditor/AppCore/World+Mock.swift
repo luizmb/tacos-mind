@@ -46,14 +46,14 @@ extension World {
         unlinkRepository: @escaping @Sendable () -> Publisher<Void, GitHubError> = { .just(()) },
         isArticlesDirEmpty: @escaping @Sendable () -> Publisher<Bool, Never> = { .just(true) },
         previewPull: @escaping @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError> = { _ in
-            .just(PullPreview(toAdd: [], toUpdate: [], localOnlyChanges: []))
+            .just(PullPreview(toAdd: [], toUpdate: []))
         },
         applyPull: @escaping @Sendable (PullPreview) -> Publisher<Int, GitHubError> = { _ in .just(0) },
-        commitLocalChanges: @escaping @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError> = { _ in
-            .just(.nothingToCommit)
+        previewPush: @escaping @Sendable (GitHubSettings) -> Publisher<PushPreview, GitHubError> = { _ in
+            .just(PushPreview(files: [], suggestedBranch: "articles/mock"))
         },
-        openPullRequest: @escaping @Sendable (GitHubSettings) -> Publisher<URL, GitHubError> = { _ in
-            .just(URL(fileURLWithPath: "/tmp/mock-pr"))
+        performPush: @escaping @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError> = {
+            _, _, _ in .just(.nothingToPush)
         }
     ) -> World {
         World(
@@ -85,8 +85,8 @@ extension World {
             isArticlesDirEmpty: isArticlesDirEmpty,
             previewPull: previewPull,
             applyPull: applyPull,
-            commitLocalChanges: commitLocalChanges,
-            openPullRequest: openPullRequest
+            previewPush: previewPush,
+            performPush: performPush
         )
     }
 }

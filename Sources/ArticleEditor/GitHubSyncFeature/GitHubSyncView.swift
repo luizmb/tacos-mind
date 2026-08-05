@@ -12,29 +12,28 @@ public struct GitHubSyncView: View {
             path: viewStore.binding(.state(\.path), dispatch: .action(\.setPath)),
             isConfigured: viewStore.state.isConfigured,
             repoURL: viewStore.state.repoURL,
-            branch: viewStore.state.branch,
+            baseBranch: viewStore.state.baseBranch,
             isPulling: viewStore.state.isPulling,
-            pendingPullPreview: viewStore.state.pendingPullPreview,
-            isCommitting: viewStore.state.isCommitting,
-            lastCommitOutcome: viewStore.state.lastCommitOutcome,
-            isOpeningPR: viewStore.state.isOpeningPR,
-            lastPRURL: viewStore.state.lastPRURL,
+            lastPullOutcome: viewStore.state.lastPullOutcome,
+            canOverwriteKeptLocal: viewStore.state.canOverwriteKeptLocal,
+            isPushing: viewStore.state.isPushing,
+            lastPushOutcome: viewStore.state.lastPushOutcome,
             lastError: viewStore.state.lastError,
-            // A genuine `Optional` — `.presence` is correct here, and `pendingPullPreview`
-            // is the *only* field in this feature it was ever correct for. The three
-            // sibling calls that used to sit alongside it were reading plain `Bool`s,
-            // which `.presence` silently promotes to `Bool?`, making the getter
-            // `Optional(false) != nil` — permanently true. Those flags are gone: two are
-            // pushed routes now, and the third uses `.binding`.
-            isConfirmingPull: viewStore.presence(.state(\.pendingPullPreview), dismiss: .cancelPull),
+            // A plain `Bool`, so `.binding` — never `.presence`, which silently promotes a
+            // `Bool` to `Bool?` and makes the getter `Optional(false) != nil`, i.e.
+            // permanently true. Same shape as `isConfirmingUnlink` below.
+            isConfirmingOverwrite: viewStore.binding(
+                .state(\.isConfirmingOverwrite),
+                dispatch: .action(review: { _ in .cancelOverwriteKeptLocal })
+            ),
             onDone: { dispatch(.requestClose) },
             onRequestLink: { dispatch(.requestLink) },
             onRequestUnlink: { dispatch(.requestUnlink) },
             onRequestEditBranch: { dispatch(.requestEditBranch) },
             onPull: { dispatch(.pull) },
-            onConfirmPull: { dispatch(.confirmPull) },
-            onCommit: { dispatch(.commit) },
-            onOpenPR: { dispatch(.openPR) },
+            onRequestOverwriteKeptLocal: { dispatch(.requestOverwriteKeptLocal) },
+            onConfirmOverwriteKeptLocal: { dispatch(.overwriteKeptLocal) },
+            onPush: { dispatch(.push) },
             isConfirmingUnlink: viewStore.binding(
                 .state(\.isConfirmingUnlink),
                 dispatch: .action(review: { _ in .cancelUnlink })
@@ -55,6 +54,20 @@ public struct GitHubSyncView: View {
                 isSaving: viewStore.state.isSavingBranch,
                 onCancel: { dispatch(.cancelEditBranch) },
                 onConfirm: { dispatch(.confirmEditBranch) }
+            ),
+            pushScreen: PushContent(
+                branchInput: viewStore.binding(.state(\.pushBranchInput), dispatch: .action(\.setPushBranchInput)),
+                commitMessageInput: viewStore.binding(
+                    .state(\.pushCommitMessageInput),
+                    dispatch: .action(\.setPushCommitMessageInput)
+                ),
+                prTitleInput: viewStore.binding(.state(\.pushPRTitleInput), dispatch: .action(\.setPushPRTitleInput)),
+                prBodyInput: viewStore.binding(.state(\.pushPRBodyInput), dispatch: .action(\.setPushPRBodyInput)),
+                fileCount: viewStore.state.pushFileCount,
+                baseBranch: viewStore.state.baseBranch,
+                isPushing: viewStore.state.isPushing,
+                onCancel: { dispatch(.cancelPush) },
+                onConfirm: { dispatch(.confirmPush) }
             )
         )
         .onAppear { dispatch(.loadSettings) }

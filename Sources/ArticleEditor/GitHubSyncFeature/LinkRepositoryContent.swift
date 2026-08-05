@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The one-time repo/branch/token setup screen — everything here except `branch` becomes
-/// unchangeable once linked (see `EditBranchContent`); changing repo or token means
+/// The one-time repo/branch/token setup screen — everything here except the base branch
+/// becomes unchangeable once linked (see `EditBranchContent`); changing repo or token means
 /// unlinking and linking again.
 public struct LinkRepositoryContent: View {
     let repoInput: Binding<String>
@@ -32,12 +32,19 @@ public struct LinkRepositoryContent: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             }
-            Section("Branch") {
-                TextField("Branch", text: branchInput)
+            Section {
+                TextField("Base branch", text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
                     .autocorrectionDisabled()
+            } header: {
+                Text("Base Branch")
+            } footer: {
+                Text(
+                    "Pull reads from this branch, and pushes open a pull request into it. " +
+                    "Nothing is ever committed to it directly."
+                )
             }
             Section("Personal Access Token") {
                 SecureField("Token", text: tokenInput)
@@ -46,7 +53,7 @@ public struct LinkRepositoryContent: View {
                     Text("On that page, fill in:")
                     Text("• Repository access → Only select repositories → the one above")
                     Text("• Permissions → Contents → Read and write")
-                    Text("• Permissions → Pull requests → Read and write (for Open Pull Request)")
+                    Text("• Permissions → Pull requests → Read and write (Push opens a PR)")
                 }
                 .font(.footnote)
                 .foregroundStyle(.secondary)

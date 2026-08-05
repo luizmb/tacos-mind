@@ -1,16 +1,19 @@
 import Foundation
 
 /// User-supplied GitHub sync configuration — never bundled with the app, always entered
-/// by the user and persisted locally (`token` in the Keychain, `repoURL`/`branch` in a
+/// by the user and persisted locally (`token` in the Keychain, `repoURL`/`baseBranch` in a
 /// plain settings file — see `World+Live.swift`).
 public struct GitHubSettings: Codable, Equatable, Sendable {
     public var repoURL: String
-    public var branch: String
+    /// The branch pull reads from and pushes open their pull request *against* — never a
+    /// branch this app writes to. Every push commits to its own feature branch instead,
+    /// so nothing here is ever force-moved under the user.
+    public var baseBranch: String
     public var token: String
 
-    public init(repoURL: String, branch: String, token: String) {
+    public init(repoURL: String, baseBranch: String, token: String) {
         self.repoURL = repoURL
-        self.branch = branch
+        self.baseBranch = baseBranch
         self.token = token
     }
 

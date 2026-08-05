@@ -110,7 +110,7 @@ enum GitHubClient {
         try await call(
             "repos/\(repo.owner)/\(repo.name)/contents/Articles",
             settings: settings,
-            query: ["ref": settings.branch]
+            query: ["ref": settings.baseBranch]
         )
     }
 
@@ -127,8 +127,8 @@ enum GitHubClient {
         }
     }
 
-    /// The current file content + sha at `path` on `branch` — `nil` if it doesn't exist
-    /// there yet (a 404 is a normal, expected outcome here, not an error).
+    /// The current file content + sha at `path` on the base branch — `nil` if it doesn't
+    /// exist there yet (a 404 is a normal, expected outcome here, not an error).
     static func fileContent(
         _ settings: GitHubSettings,
         repo: GitHubRepository,
@@ -137,7 +137,7 @@ enum GitHubClient {
         let content: GitHubFileContent? = try await callOptional(
             "repos/\(repo.owner)/\(repo.name)/contents/\(path)",
             settings: settings,
-            query: ["ref": settings.branch]
+            query: ["ref": settings.baseBranch]
         )
         guard let content else { return nil }
         guard let data = Data(base64Encoded: content.content, options: .ignoreUnknownCharacters) else {
@@ -252,14 +252,22 @@ enum GitHubClient {
         return prs.first
     }
 
+    /// The head branch and the PR's title/body all come from `request` — the push's own
+    /// feature branch — and `base` is the configured base branch. Keeping the two sides
+    /// separate is the point: reading both off `settings` is what made every PR fail with
+    /// a 422, since the one configured branch was being passed as head *and* base.
     static func createPullRequest(
         _ settings: GitHubSettings,
         repo: GitHubRepository,
-        base: String,
-        title: String,
-        body: String
+        request: PushRequest,
+        base: String
     ) async throws(GitHubError) -> GitHubPullRequest {
-        let requestBody = CreatePullRequestRequest(title: title, head: settings.branch, base: base, body: body)
+        let requestBody = CreatePullRequestRequest(
+            title: request.prTitle,
+            head: request.branch,
+            base: base,
+            body: request.prBody
+        )
         return try await call(
             "repos/\(repo.owner)/\(repo.name)/pulls",
             settings: settings,
