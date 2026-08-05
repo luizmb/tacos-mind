@@ -12,15 +12,19 @@ public struct EditBranchContent: View {
     /// `GitHubSyncContent`'s stack, which supplies the bar this toolbar attaches to.
     public var body: some View {
         Form {
-            Section("Branch") {
-                TextField("Branch", text: branchInput)
+            Section {
+                TextField("Base branch", text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
                     .autocorrectionDisabled()
+            } header: {
+                Text("Base Branch")
+            } footer: {
+                Text("Pull reads from this branch, and pushes open a pull request into it.")
             }
         }
-        .navigationTitle("Edit Branch")
+        .navigationTitle("Edit Base Branch")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel", action: onCancel)

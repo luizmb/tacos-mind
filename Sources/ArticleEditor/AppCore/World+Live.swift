@@ -99,8 +99,13 @@ extension World {
             if case .failure(let error) = result { throw mapGeneratorError(error) }
         }
 
+        // One clock for the whole World — `previewPush` stamps its suggested branch name
+        // from the same closure `currentDate` exposes, rather than reaching for `Date()`
+        // a second time.
+        let now: @Sendable () -> Date = { Date() }
+
         return World(
-            currentDate: { Date() },
+            currentDate: now,
             articlesDirectory: { articlesDir },
             repositoryRoot: { root },
             decoder: jsonDecoder,
@@ -547,13 +552,13 @@ extension World {
                 Publisher { continuation in
                     guard
                         let repoURL = UserDefaults.standard.string(forKey: GitHubDefaultsKey.repoURL),
-                        let branch = UserDefaults.standard.string(forKey: GitHubDefaultsKey.branch),
+                        let baseBranch = UserDefaults.standard.string(forKey: GitHubDefaultsKey.branch),
                         let token = GitHubTokenKeychain.load()
                     else {
                         continuation.yield(nil)
                         return
                     }
-                    continuation.yield(GitHubSettings(repoURL: repoURL, branch: branch, token: token))
+                    continuation.yield(GitHubSettings(repoURL: repoURL, baseBranch: baseBranch, token: token))
                 }
             },
             // Only called once, from the link setup screen — verifies the repo/token are
@@ -567,7 +572,7 @@ extension World {
                         throw error
                     }
                     UserDefaults.standard.set(settings.repoURL, forKey: GitHubDefaultsKey.repoURL)
-                    UserDefaults.standard.set(settings.branch, forKey: GitHubDefaultsKey.branch)
+                    UserDefaults.standard.set(settings.baseBranch, forKey: GitHubDefaultsKey.branch)
                     continuation.yield(())
                 }
             },
@@ -600,21 +605,21 @@ extension World {
                 Publisher { continuation throws(GitHubError) in
                     guard let repo = settings.repository else { throw .invalidRepoURL }
                     let entries = try await GitHubClient.listArticles(settings, repo: repo)
-                    var toAdd: [PullPreview.FileChange] = []
-                    var toUpdate: [PullPreview.FileChange] = []
+                    var toAdd: [SyncFileChange] = []
+                    var toUpdate: [SyncFileChange] = []
                     for entry in entries where entry.type == "file" && entry.name.hasSuffix(".json") {
                         guard let downloadURL = entry.downloadURL else { continue }
                         let remoteData = try await GitHubClient.downloadRaw(downloadURL)
                         let localURL = articlesDir.appendingPathComponent(entry.name)
                         if let localData = try? Data(contentsOf: localURL) {
                             if localData != remoteData {
-                                toUpdate.append(PullPreview.FileChange(name: entry.name, content: remoteData))
+                                toUpdate.append(SyncFileChange(name: entry.name, content: remoteData))
                             }
                         } else {
-                            toAdd.append(PullPreview.FileChange(name: entry.name, content: remoteData))
+                            toAdd.append(SyncFileChange(name: entry.name, content: remoteData))
                         }
                     }
-                    continuation.yield(PullPreview(toAdd: toAdd, toUpdate: toUpdate, localOnlyChanges: toUpdate.map(\.name)))
+                    continuation.yield(PullPreview(toAdd: toAdd, toUpdate: toUpdate))
                 }
             },
             applyPull: { preview in
@@ -640,7 +645,10 @@ extension World {
                     continuation.yield(count)
                 }
             },
-            commitLocalChanges: { settings in
+            // Diff-only: nothing is created on GitHub here. `GitHubClient.fileContent`
+            // reads the base branch, so "dirty" means "differs from what I'd be opening a
+            // PR against" — which is exactly the set the PR should contain.
+            previewPush: { settings in
                 Publisher { continuation throws(GitHubError) in
                     guard let repo = settings.repository else { throw .invalidRepoURL }
 
@@ -652,39 +660,45 @@ extension World {
                         throw .network(error.localizedDescription)
                     }
 
-                    var dirty: [(name: String, content: Data)] = []
+                    var dirty: [SyncFileChange] = []
                     for file in localFiles {
                         guard let localData = try? Data(contentsOf: file) else { continue }
                         let name = file.lastPathComponent
                         let remoteData = try await GitHubClient.fileContent(settings, repo: repo, path: "Articles/\(name)")
                         if remoteData != localData {
-                            dirty.append((name: name, content: localData))
+                            dirty.append(SyncFileChange(name: name, content: localData))
                         }
                     }
 
-                    guard !dirty.isEmpty else {
-                        continuation.yield(.nothingToCommit)
+                    continuation.yield(PushPreview(files: dirty, suggestedBranch: suggestedPushBranch(now())))
+                }
+            },
+            performPush: { settings, request, preview in
+                Publisher { continuation throws(GitHubError) in
+                    guard let repo = settings.repository else { throw .invalidRepoURL }
+                    guard !preview.files.isEmpty else {
+                        continuation.yield(.nothingToPush)
                         return
                     }
 
-                    // Ensure the branch exists, creating it from the default branch's tip
-                    // if this is a brand-new branch name.
-                    var tipSHA = try await GitHubClient.branchTipSHA(settings, repo: repo, branch: settings.branch)
+                    // An existing branch is appended to rather than rejected, so pushing
+                    // the same name twice adds a commit to the PR already open for it.
+                    // Only a genuinely new name gets branched off the base branch's tip.
+                    var tipSHA = try await GitHubClient.branchTipSHA(settings, repo: repo, branch: request.branch)
                     if tipSHA == nil {
-                        let info = try await GitHubClient.repoInfo(settings, repo: repo)
-                        guard let defaultTip = try await GitHubClient.branchTipSHA(settings, repo: repo, branch: info.defaultBranch)
+                        guard let baseTip = try await GitHubClient.branchTipSHA(settings, repo: repo, branch: settings.baseBranch)
                         else {
                             throw .badStatus(404)
                         }
-                        try await GitHubClient.createBranch(settings, repo: repo, branch: settings.branch, atSHA: defaultTip)
-                        tipSHA = defaultTip
+                        try await GitHubClient.createBranch(settings, repo: repo, branch: request.branch, atSHA: baseTip)
+                        tipSHA = baseTip
                     }
                     guard let parentSHA = tipSHA else { throw .badStatus(404) }
 
                     let baseTreeSHA = try await GitHubClient.baseTreeSHA(settings, repo: repo, commitSHA: parentSHA)
 
                     var treeEntries: [(path: String, blobSHA: String)] = []
-                    for file in dirty {
+                    for file in preview.files {
                         let blobSHA = try await GitHubClient.createBlob(settings, repo: repo, content: file.content)
                         treeEntries.append((path: "Articles/\(file.name)", blobSHA: blobSHA))
                     }
@@ -695,38 +709,37 @@ extension World {
                         baseTreeSHA: baseTreeSHA,
                         entries: treeEntries
                     )
-                    let message = "Update \(dirty.count) article\(dirty.count == 1 ? "" : "s") from Article Editor"
                     let newCommitSHA = try await GitHubClient.createCommit(
                         settings,
                         repo: repo,
-                        message: message,
+                        message: request.commitMessage,
                         treeSHA: newTreeSHA,
                         parentSHA: parentSHA
                     )
-                    try await GitHubClient.updateBranchRef(settings, repo: repo, branch: settings.branch, toSHA: newCommitSHA)
+                    try await GitHubClient.updateBranchRef(settings, repo: repo, branch: request.branch, toSHA: newCommitSHA)
 
                     guard let commitURL = URL(string: "https://github.com/\(repo.owner)/\(repo.name)/commit/\(newCommitSHA)") else {
                         throw .invalidRepoURL
                     }
-                    continuation.yield(.committed(files: dirty.map(\.name), commitURL: commitURL))
-                }
-            },
-            openPullRequest: { settings in
-                Publisher { continuation throws(GitHubError) in
-                    guard let repo = settings.repository else { throw .invalidRepoURL }
-                    if let existing = try await GitHubClient.existingPullRequest(settings, repo: repo, branch: settings.branch) {
-                        continuation.yield(existing.htmlURL)
-                        return
+
+                    // Idempotent: a second push to the same branch reuses its open PR
+                    // instead of failing on "a pull request already exists".
+                    let prURL: URL
+                    if let existing = try await GitHubClient.existingPullRequest(settings, repo: repo, branch: request.branch) {
+                        prURL = existing.htmlURL
+                    } else {
+                        let pr = try await GitHubClient.createPullRequest(
+                            settings,
+                            repo: repo,
+                            request: request,
+                            base: settings.baseBranch
+                        )
+                        prURL = pr.htmlURL
                     }
-                    let info = try await GitHubClient.repoInfo(settings, repo: repo)
-                    let pr = try await GitHubClient.createPullRequest(
-                        settings,
-                        repo: repo,
-                        base: info.defaultBranch,
-                        title: "Article updates",
-                        body: "Opened from the Article Editor app."
+
+                    continuation.yield(
+                        .pushed(files: preview.files.map(\.name), branch: request.branch, commitURL: commitURL, prURL: prURL)
                     )
-                    continuation.yield(pr.htmlURL)
                 }
             }
         )
@@ -739,6 +752,23 @@ extension World {
 private enum GitHubDefaultsKey {
     static let repoURL = "io.lu.ArticleEditor.github.repoURL"
     static let branch = "io.lu.ArticleEditor.github.branch"
+}
+
+/// The branch name a push starts out suggesting — `articles/2026-08-05-1432`. The instant
+/// comes in as a parameter (from `World.currentDate`), never read off the clock here.
+private func suggestedPushBranch(_ date: Date) -> String {
+    "articles/\(pushBranchFormatter().string(from: date))"
+}
+
+/// Locale and time zone are pinned rather than left to `.current`: the same instant has to
+/// name the same branch whatever the device's region settings say, and a branch name that
+/// shifted with the user's time zone would be a confusing thing to hand back.
+private func pushBranchFormatter() -> DateFormatter {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = .gmt
+    formatter.dateFormat = "yyyy-MM-dd-HHmm"
+    return formatter
 }
 
 private func sha256Hex(of data: Data) -> String {

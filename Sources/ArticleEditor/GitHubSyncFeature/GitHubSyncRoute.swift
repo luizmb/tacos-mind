@@ -14,4 +14,7 @@
 public enum GitHubSyncRoute: Hashable, Sendable, Codable {
     case link
     case editBranch
+    /// Pushed by `pushPreviewed` once there's actually something to push, never by a tap —
+    /// the form can't be reached without the preview whose bytes it will send.
+    case push
 }

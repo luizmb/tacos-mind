@@ -69,14 +69,14 @@ public struct World: Sendable {
     /// reads as "not configured yet."
     public var loadGitHubSettings: @Sendable () -> Publisher<GitHubSettings?, Never>
     /// Only called from the one-time link setup — verifies `settings` (repo access +
-    /// token validity) via a live API call before persisting anything. Only `branch` can
-    /// be changed after this via `updateBranch`; changing `repoURL`/`token` means
+    /// token validity) via a live API call before persisting anything. Only `baseBranch`
+    /// can be changed after this via `updateBranch`; changing `repoURL`/`token` means
     /// `unlinkRepository` then linking again.
     public var linkRepository: @Sendable (GitHubSettings) -> Publisher<Void, GitHubError>
     /// The only mutation allowed on an already-linked repo — leaves `repoURL`/token alone.
     public var updateBranch: @Sendable (String) -> Publisher<Void, GitHubError>
-    /// Clears the linked repo entirely: `repoURL`/`branch` and the Keychain token. Local
-    /// articles are untouched — this only forgets where they sync to.
+    /// Clears the linked repo entirely: `repoURL`/`baseBranch` and the Keychain token.
+    /// Local articles are untouched — this only forgets where they sync to.
     public var unlinkRepository: @Sendable () -> Publisher<Void, GitHubError>
     /// Whether `articlesDirectory()` currently has zero `.json` files — decides what a
     /// freshly-linked repo's first sync does (see `GitHubSyncFeature.firstSyncDecided`).
@@ -87,17 +87,18 @@ public struct World: Sendable {
     /// Writes every file in `preview.toAdd`/`preview.toUpdate` to `articlesDirectory()`.
     /// Returns the number of files written.
     public var applyPull: @Sendable (PullPreview) -> Publisher<Int, GitHubError>
-    /// Diffs every local article against the configured branch and, if any differ,
-    /// commits all of them as one atomic commit (Git Data API: blob/tree/commit/ref).
-    /// Filename collisions overwrite the remote file with the local one; local files with
-    /// no remote counterpart yet are added. Remote-only files are left alone, never
-    /// deleted — also what a freshly-linked repo's first sync uses to push a non-empty
-    /// local `Articles/` up, rather than destructively pulling remote over it.
-    public var commitLocalChanges: @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError>
-    /// Opens a pull request from the configured branch to the repo's default branch —
-    /// or, if one's already open for that branch, just returns its URL instead of
-    /// erroring.
-    public var openPullRequest: @Sendable (GitHubSettings) -> Publisher<URL, GitHubError>
+    /// Diffs every local article against `settings.baseBranch` and reports which differ,
+    /// carrying their local bytes so `performPush` never re-reads them. Nothing is created
+    /// on GitHub — this is what pre-fills the push form, and what tells the caller there's
+    /// nothing to push before any form is shown at all.
+    public var previewPush: @Sendable (GitHubSettings) -> Publisher<PushPreview, GitHubError>
+    /// Commits `preview.files` as one atomic commit (Git Data API: blob/tree/commit/ref)
+    /// onto `request.branch` — creating that branch off the base branch's tip if it's new,
+    /// or appending to it if a previous push already made it — then opens a pull request
+    /// into `settings.baseBranch`. Reuses the branch's already-open PR if there is one, so
+    /// pushing the same branch name twice appends rather than erroring. The base branch is
+    /// never written to directly.
+    public var performPush: @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError>
 
     public init(
         currentDate: @escaping @Sendable () -> Date,
@@ -128,8 +129,8 @@ public struct World: Sendable {
         isArticlesDirEmpty: @escaping @Sendable () -> Publisher<Bool, Never>,
         previewPull: @escaping @Sendable (GitHubSettings) -> Publisher<PullPreview, GitHubError>,
         applyPull: @escaping @Sendable (PullPreview) -> Publisher<Int, GitHubError>,
-        commitLocalChanges: @escaping @Sendable (GitHubSettings) -> Publisher<CommitOutcome, GitHubError>,
-        openPullRequest: @escaping @Sendable (GitHubSettings) -> Publisher<URL, GitHubError>
+        previewPush: @escaping @Sendable (GitHubSettings) -> Publisher<PushPreview, GitHubError>,
+        performPush: @escaping @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError>
     ) {
         self.currentDate = currentDate
         self.articlesDirectory = articlesDirectory
@@ -159,7 +160,7 @@ public struct World: Sendable {
         self.isArticlesDirEmpty = isArticlesDirEmpty
         self.previewPull = previewPull
         self.applyPull = applyPull
-        self.commitLocalChanges = commitLocalChanges
-        self.openPullRequest = openPullRequest
+        self.previewPush = previewPush
+        self.performPush = performPush
     }
 }

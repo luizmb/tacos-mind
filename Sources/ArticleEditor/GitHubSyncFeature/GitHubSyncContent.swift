@@ -5,23 +5,22 @@ public struct GitHubSyncContent: View {
     let path: Binding<[GitHubSyncRoute]>
     let isConfigured: Bool
     let repoURL: String
-    let branch: String
+    let baseBranch: String
     let isPulling: Bool
-    let pendingPullPreview: PullPreview?
-    let isCommitting: Bool
-    let lastCommitOutcome: CommitOutcome?
-    let isOpeningPR: Bool
-    let lastPRURL: URL?
+    let lastPullOutcome: PullOutcome?
+    let canOverwriteKeptLocal: Bool
+    let isPushing: Bool
+    let lastPushOutcome: PushOutcome?
     let lastError: String?
-    let isConfirmingPull: Binding<Bool>
+    let isConfirmingOverwrite: Binding<Bool>
     let onDone: () -> Void
     let onRequestLink: () -> Void
     let onRequestUnlink: () -> Void
     let onRequestEditBranch: () -> Void
     let onPull: () -> Void
-    let onConfirmPull: () -> Void
-    let onCommit: () -> Void
-    let onOpenPR: () -> Void
+    let onRequestOverwriteKeptLocal: () -> Void
+    let onConfirmOverwriteKeptLocal: () -> Void
+    let onPush: () -> Void
 
     let isConfirmingUnlink: Binding<Bool>
     let isUnlinking: Bool
@@ -29,12 +28,13 @@ public struct GitHubSyncContent: View {
 
     let linkScreen: LinkRepositoryContent
     let editBranchScreen: EditBranchContent
+    let pushScreen: PushContent
 
-    /// Link and Edit Branch are **pushed**, not sheeted. Two sheets and two confirmation
-    /// dialogs presented from inside a sheet is more presentation bookkeeping than
-    /// SwiftUI reliably tracks — it was leaving a modal on top with no working
-    /// dismiss — and neither form was ever conceptually modal to begin with. What's left
-    /// is two confirmation dialogs on one view, which is ordinary.
+    /// Link, Edit Branch and Push are **pushed**, not sheeted. Two sheets and two
+    /// confirmation dialogs presented from inside a sheet is more presentation bookkeeping
+    /// than SwiftUI reliably tracks — it was leaving a modal on top with no working
+    /// dismiss — and none of these forms was ever conceptually modal to begin with. What's
+    /// left is two confirmation dialogs on one view, which is ordinary.
     public var body: some View {
         NavigationStack(path: path) {
             Form {
@@ -61,6 +61,7 @@ public struct GitHubSyncContent: View {
                 switch route {
                 case .link: linkScreen
                 case .editBranch: editBranchScreen
+                case .push: pushScreen
                 }
             }
         }
@@ -75,18 +76,15 @@ public struct GitHubSyncContent: View {
             Text("Local articles are kept — you'll just need to link again to sync them.")
         }
         .confirmationDialog(
-            "This will overwrite local changes",
-            isPresented: isConfirmingPull,
+            "Discard your local changes?",
+            isPresented: isConfirmingOverwrite,
             titleVisibility: .visible
         ) {
-            Button("Pull and Overwrite", role: .destructive, action: onConfirmPull)
+            Button("Overwrite with GitHub's Version", role: .destructive, action: onConfirmOverwriteKeptLocal)
             Button("Cancel", role: .cancel) {}
         } message: {
-            if let pendingPullPreview {
-                Text(
-                    "\(pendingPullPreview.localOnlyChanges.count) article(s) have local changes not on GitHub: " +
-                    "\(pendingPullPreview.localOnlyChanges.joined(separator: ", ")). Pulling will overwrite them."
-                )
+            if let keptLocal = lastPullOutcome?.keptLocal, !keptLocal.isEmpty {
+                Text("\(keptLocal.joined(separator: ", ")) will be replaced by what's on GitHub. This can't be undone.")
             }
         }
     }
@@ -96,8 +94,8 @@ public struct GitHubSyncContent: View {
         if isConfigured {
             Section("Repository") {
                 LabeledContent("Repo", value: repoURL)
-                LabeledContent("Branch", value: branch)
-                Button("Edit Branch", action: onRequestEditBranch)
+                LabeledContent("Base branch", value: baseBranch)
+                Button("Edit Base Branch", action: onRequestEditBranch)
                 Button("Unlink", role: .destructive, action: onRequestUnlink)
                     .disabled(isUnlinking)
             }
@@ -119,25 +117,18 @@ public struct GitHubSyncContent: View {
                 disabled: !isConfigured || isPulling,
                 action: onPull
             )
-            actionRow(
-                title: "Commit local changes",
-                systemImage: "arrow.up.circle",
-                isBusy: isCommitting,
-                disabled: !isConfigured || isCommitting,
-                action: onCommit
-            )
-            if let lastCommitOutcome {
-                commitOutcomeView(lastCommitOutcome)
+            if let lastPullOutcome {
+                pullOutcomeView(lastPullOutcome)
             }
             actionRow(
-                title: "Open Pull Request",
-                systemImage: "arrow.triangle.pull",
-                isBusy: isOpeningPR,
-                disabled: !isConfigured || isOpeningPR,
-                action: onOpenPR
+                title: "Push to GitHub",
+                systemImage: "arrow.up.circle",
+                isBusy: isPushing,
+                disabled: !isConfigured || isPushing,
+                action: onPush
             )
-            if let lastPRURL {
-                Link("View Pull Request", destination: lastPRURL)
+            if let lastPushOutcome {
+                pushOutcomeView(lastPushOutcome)
             }
         }
     }
@@ -161,17 +152,45 @@ public struct GitHubSyncContent: View {
         .disabled(disabled)
     }
 
+    /// Kept-local files are reported rather than prompted about — the pull already applied
+    /// everything it safely could, and discarding local work is offered here as a
+    /// deliberate second step instead of a gate on the common case.
     @ViewBuilder
-    private func commitOutcomeView(_ outcome: CommitOutcome) -> some View {
+    private func pullOutcomeView(_ outcome: PullOutcome) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if outcome.applied == 0, outcome.keptLocal.isEmpty {
+                Text("Already up to date.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else if outcome.applied > 0 {
+                Text("Pulled \(outcome.applied) article\(outcome.applied == 1 ? "" : "s").")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if !outcome.keptLocal.isEmpty {
+                Text("Kept your local version of \(outcome.keptLocal.joined(separator: ", ")). Push to publish.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        if canOverwriteKeptLocal {
+            Button("Overwrite Local with GitHub's Version", role: .destructive, action: onRequestOverwriteKeptLocal)
+                .disabled(isPulling)
+        }
+    }
+
+    @ViewBuilder
+    private func pushOutcomeView(_ outcome: PushOutcome) -> some View {
         switch outcome {
-        case .nothingToCommit:
-            Text("Nothing to commit — everything's already on GitHub.")
+        case .nothingToPush:
+            Text("Nothing to push — everything's already on GitHub.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-        case .committed(let files, let commitURL):
+        case .pushed(let files, let branch, let commitURL, let prURL):
             VStack(alignment: .leading, spacing: 4) {
-                Text("Committed \(files.count) file(s): \(files.joined(separator: ", "))")
+                Text("Pushed \(files.count) file(s) to \(branch): \(files.joined(separator: ", "))")
                     .font(.footnote)
+                Link("View Pull Request", destination: prURL)
                 Link("View Commit", destination: commitURL)
             }
         }

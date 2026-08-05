@@ -400,8 +400,8 @@ public enum AppScopes: Rig {
                 isArticlesDirEmpty: world.isArticlesDirEmpty,
                 previewPull: world.previewPull,
                 applyPull: world.applyPull,
-                commitLocalChanges: world.commitLocalChanges,
-                openPullRequest: world.openPullRequest
+                previewPush: world.previewPush,
+                performPush: world.performPush
             )
         }
 }
