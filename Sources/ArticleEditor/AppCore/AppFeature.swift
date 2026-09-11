@@ -162,6 +162,7 @@ public enum AppFeature {
             .on(.action(\.gitHubSync.firstSyncCompleted), dispatch: .action(review: const(.navigation(.dismissGitHubSync))))
 
         <> chatContextSyncBehavior()
+        <> articleIndexSyncBehavior()
         <> quitBehavior()
     }
 }
@@ -286,6 +287,40 @@ private func chatContextSyncBehavior() -> Behavior<AppAction, AppState, World> {
             return .reduce { $0.chat.wrapped?.brainstorming = result.article.brainstorming }
         case .articleEditor(.reloaded(_, .success(let result))):
             return .reduce { $0.chat.wrapped?.brainstorming = result.article.brainstorming }
+        default:
+            return .doNothing
+        }
+    }
+}
+
+// MARK: - Article index sync
+//
+// The list of articles is a fact about the Articles directory, and two screens keep their
+// own copy of it: the sidebar, and the editor's link picker. Each loads it once, in its
+// own `.start`, so anything that rewrites a file afterwards leaves them describing a file
+// as it no longer is — a renamed article kept its old title in the sidebar until the app
+// was relaunched, and articles a GitHub pull had just written did not show up at all.
+//
+// Everything here is a *re-derivation*, never a patch. The two copies are re-read from
+// disk rather than edited in place, so no second answer to "what is a summary" appears
+// here; and the sidebar highlight is re-run through navigation's own
+// `syncSidebarSelection`, so this does not become a second writer of it with an opinion
+// of its own. That matters because a save can move the very slug the highlight matches on
+// (see `ArticleSummary.reflecting(_:)`), and the editor has just updated `opened` by the
+// time this runs.
+
+private func articleIndexSyncBehavior() -> Behavior<AppAction, AppState, World> {
+    Behavior<AppAction, AppState, World>.handle { action, _ in
+        switch action {
+        // The open article was written — its title, number or slug may have moved with it.
+        case .articleEditor(.saved(.success)),
+             // It was rewritten underneath us, and the editor took the disk's version.
+             .articleEditor(.reloaded(_, .success)),
+             // A pull writes whole files, including articles no screen has open.
+             .gitHubSync(.pullApplied(.success)):
+            return .reduce { $0.syncSidebarSelection() }
+                .produce { _ in AppAction.immediateDispatch(.articleList(.start)) }
+                .produce { _ in AppAction.immediateDispatch(.articleEditor(.refreshSummaries)) }
         default:
             return .doNothing
         }

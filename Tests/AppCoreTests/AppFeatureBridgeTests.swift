@@ -210,6 +210,102 @@ struct AppFeatureBridgeTests {
         return editor
     }
 
+    // MARK: - Keeping the article index honest
+
+    /// The sidebar is a listing of a directory, taken once. Anything that rewrites a file
+    /// afterwards leaves it describing a file as it no longer is — here, a renamed article
+    /// kept its old title in the sidebar until the app was relaunched.
+    @Test("a save re-reads the index, so a renamed article doesn't keep its old title")
+    func aSaveRefreshesTheSidebar() async {
+        let open = summary("pure-functions")
+        let renamed = ArticleSummary(url: open.url, slug: open.slug, title: "Renamed On Disk", number: 1)
+        let directory = ArticleIndex([open])
+        var initial = AppState()
+        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.articleList.summaries = [open]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            listArticles: { .just(directory.summaries) },
+            saveDocument: { _ in
+                // Writing the file is what makes the old listing wrong.
+                directory.set([renamed])
+                return .just("hash-after-save")
+            }
+        ))
+
+        store.dispatch(.articleEditor(.save), source: ActionSource(file: #fileID, function: #function, line: #line))
+        await settle(store)
+
+        #expect(store.state.articleList.summaries == [renamed])
+    }
+
+    /// A pull writes whole files, including articles no screen has open — before this,
+    /// they didn't appear in the sidebar at all until the next launch.
+    @Test("a GitHub pull re-reads the index, so newly pulled articles show up")
+    func aPullRefreshesTheSidebar() async {
+        let existing = summary("pure-functions")
+        let pulled = summary("from-github", number: 7)
+        let directory = ArticleIndex([existing, pulled])
+        var initial = AppState()
+        initial.articleList.summaries = [existing]
+        let store = makeStore(initial: initial, world: .mock(listArticles: { .just(directory.summaries) }))
+
+        store.dispatch(
+            .gitHubSync(.pullApplied(.success(PullOutcome(applied: 1, keptLocal: [])))),
+            source: ActionSource(file: #fileID, function: #function, line: #line)
+        )
+        await settle(store)
+
+        #expect(store.state.articleList.summaries == [existing, pulled])
+    }
+
+    /// A save can move the very slug the highlight matches on. The editor re-describes its
+    /// own summary, and the highlight is re-derived from it in the same pass, so the two
+    /// cannot end up pointing at different rows.
+    @Test("renaming an article's slug and saving keeps the sidebar highlight on it")
+    func aRenamedSlugKeepsItsHighlight() async {
+        let open = summary("pure-functions")
+        let renamed = ArticleSummary(url: open.url, slug: "renamed", title: "Renamed", number: 1)
+        let directory = ArticleIndex([open])
+        // The listing and the file agree on the number; only the name is being changed.
+        var editor = ArticleEditorFeature.State(opening: open)
+        var document = OpenDocument(
+            url: open.url,
+            article: Article(title: open.title, slug: open.slug, emphasis: .text, number: open.number, blocks: [.paragraph("Body")])
+        )
+        document.slug = "renamed"
+        document.title = "Renamed"
+        editor.document = document
+        var initial = AppState()
+        initial.path = [.articleEditor(editor)]
+        initial.articleList.summaries = [open]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            listArticles: { .just(directory.summaries) },
+            saveDocument: { _ in
+                directory.set([renamed])
+                return .just("hash-after-save")
+            }
+        ))
+
+        store.dispatch(.articleEditor(.save), source: ActionSource(file: #fileID, function: #function, line: #line))
+        await settle(store)
+
+        #expect(store.state.articleList.summaries == [renamed])
+        #expect(store.state.articleList.selectedSlug == "renamed")
+        #expect(store.state.openEditor?.opened == renamed)
+    }
+
+    /// A stand-in for the Articles directory, so a test can change what the *next* listing
+    /// answers — which is the whole point of a refresh. Exercised serially from a single
+    /// `@MainActor` test, so the lack of real synchronization is safe despite
+    /// `@unchecked Sendable`.
+    private final class ArticleIndex: @unchecked Sendable {
+        private(set) var summaries: [ArticleSummary]
+        init(_ summaries: [ArticleSummary]) { self.summaries = summaries }
+        func set(_ summaries: [ArticleSummary]) { self.summaries = summaries }
+    }
+
     /// An `openDocument` that actually returns something, named after the file asked for,
     /// so a test can tell *which* article ended up on screen.
     private let loadingOpenDocument: @Sendable (URL) -> Publisher<(article: Article, blockIDs: [UUID]), ArticleEditorError> = { url in
