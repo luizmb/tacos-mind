@@ -116,17 +116,22 @@ private struct SharedPresentations: ViewModifier {
             .presenting(viewStore, \.gitHubSync, dismiss: .navigation(.dismissGitHubSync)) { _ in
                 router.gitHubSync()
             }
+            // Only ever up when the app could *not* put the edits on disk itself —
+            // switching away from an article it can just save asks nothing at all. The
+            // reason travels through `presenting:` so the message cannot blank out from
+            // under the dialog as the state that raised it goes away.
             .confirmationDialog(
-                "Discard unsaved changes and open the other article?",
+                "Unsaved changes",
                 isPresented: viewStore.presence(.state(\.discardPrompt), dismiss: .navigation(.cancelPending)),
-                titleVisibility: .visible
-            ) {
+                titleVisibility: .visible,
+                presenting: viewStore.state.discardPrompt
+            ) { _ in
                 Button("Discard and Open", role: .destructive) {
                     viewStore.dispatch(.navigation(.resumePending))
                 }
                 Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This article has unsaved changes. Switching now discards them — save first if you want to keep them.")
+            } message: { problem in
+                Text(problem.message)
             }
     }
 }

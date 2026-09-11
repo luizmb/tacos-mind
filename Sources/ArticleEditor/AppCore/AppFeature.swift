@@ -125,6 +125,22 @@ public enum AppFeature {
 
         <> AppScopes.articleEditor.behavior(of: ArticleEditorFeature.self)
             .on(.action(\.articleEditor.openChat), dispatch: .action(review: const(.navigation(.presentChat))))
+            // The other half of the `unsavedDocument` gate: a save nobody asked for, taken
+            // because the user navigated away, reports back here. Landing satisfies the
+            // gate like any answered question would; failing turns the ask into the one
+            // question worth putting up. Same shape as `waitForSaveThenQuitBridge`, and
+            // guarded the same way — an unrelated save (the toolbar button, a background
+            // suspend) leaves `pendingNavigation` nil, so this cannot misfire.
+            .on(
+                .action(\.articleEditor.saved),
+                when: isSavingBeforeNavigating,
+                dispatch: .action(review: { result in
+                    switch result {
+                    case .success: .navigation(.resumePending)
+                    case .failure: .navigation(.pendingSaveFailed)
+                    }
+                })
+            )
 
         <> AppScopes.chat.behavior(of: AIChatFeature.self)
             .on(.action(\.chat.notesCompacted), dispatch: .action(review: { .articleEditor(.setBrainstorming($0)) }))
@@ -155,6 +171,10 @@ public enum AppFeature {
 /// ``NavigationGate/chatSession`` inverts.
 private let hasNoLiveChatSession: @Sendable (AppState) -> Bool = { $0.chat.wrapped?.turns.isEmpty ?? true }
 
+/// Whether the save now finishing is one navigation took on the user's behalf, rather
+/// than one they asked for.
+private let isSavingBeforeNavigating: @Sendable (AppState) -> Bool = { $0.pendingNavigation?.gate == .unsavedDocument }
+
 // Familiar spellings for the app triad — `AppFeature.State` everywhere would only add noise.
 public typealias AppState = AppFeature.State
 public typealias AppAction = AppFeature.Action
@@ -174,10 +194,41 @@ public extension AppState {
         path.compactMap(StackEntry.prism.articleEditor.preview).last
     }
 
-    /// The ask waiting on the "discard unsaved changes?" question, if that is the gate
-    /// currently holding it. A genuine `Optional`, so `presence` is the right primitive.
-    var discardPrompt: NavigationRequest? {
-        pendingNavigation.flatMap { $0.gate == .unsavedDocument ? $0.request : nil }
+    /// The "open anyway?" question, if that is the gate currently holding an ask.
+    ///
+    /// It resolves to the *problem*, not the request, so the dialog's presence and its
+    /// wording come from a single value and cannot disagree — and so the reason survives
+    /// into SwiftUI's `presenting:` argument while the dialog animates away. A genuine
+    /// `Optional`, so `presence` is the right primitive.
+    var discardPrompt: UnsavedEditsProblem? {
+        guard pendingNavigation?.gate == .unsavableDocument, let editor = openEditor else { return nil }
+        if case .conflict = editor.document?.externalChange { return .fileChangedOnDisk }
+        return editor.saveError.map(UnsavedEditsProblem.saveFailed)
+    }
+
+    /// Why the open article's edits could not simply be written when the user navigated
+    /// away — the only two ways that happens.
+    enum UnsavedEditsProblem: Sendable, Equatable {
+        /// The file changed underneath the editor, so there is no version to save that
+        /// doesn't overrule someone.
+        case fileChangedOnDisk
+        /// The save was attempted and the disk said no.
+        case saveFailed(String)
+
+        /// What the dialog tells the user. It has to carry the whole explanation: the
+        /// title is fixed, because SwiftUI evaluates it outside the `presenting:` closure.
+        var message: String {
+            switch self {
+            case .fileChangedOnDisk:
+                """
+                This article also changed on disk, so your edits can't be saved for you \
+                without overwriting that. Opening another article now discards them — \
+                resolve the conflict first if you want to keep them.
+                """
+            case .saveFailed(let reason):
+                "Your edits couldn't be saved: \(reason). Opening another article now discards them."
+            }
+        }
     }
 }
 

@@ -57,10 +57,30 @@ struct AppNavigationTests {
         }
     }
 
+    /// The saving gate acts rather than asks, so every test that trips it has a save to
+    /// drain — and asserting it here is what keeps "nothing was asked" from quietly
+    /// meaning "nothing happened at all".
+    private func expectSave(_ store: TestStore<AppAction, AppState, AppCore.World>) async {
+        await store.runEffects()
+        store.receive(AppAction.prism.articleEditor) { action, _ in
+            #expect(ArticleEditorFeature.Action.prism.save.preview(action) != nil)
+        }
+    }
+
     private func dirtyEditor(for summary: ArticleSummary) -> ArticleEditorFeature.State {
         var editor = editor(for: summary)
         editor.document?.title = "Edited, and not saved"
         #expect(editor.document?.hasUnsavedChanges == true)
+        return editor
+    }
+
+    /// Dirty *and* changed underneath — the one document the app must not write on the
+    /// user's behalf, because either version it picks overrules the other.
+    private func conflictedEditor(for summary: ArticleSummary) -> ArticleEditorFeature.State {
+        var editor = dirtyEditor(for: summary)
+        editor.document?.externalChange = .conflict(
+            diskArticle: Article(title: "Changed by someone else", slug: summary.slug, emphasis: .text, blocks: [.paragraph("Theirs")])
+        )
         return editor
     }
 
@@ -198,8 +218,11 @@ struct AppNavigationTests {
         }
     }
 
-    @Test("unsaved edits park the push behind the discard prompt")
-    func unsavedEditsParkThePush() async throws {
+    /// The whole point of the unsaved-document gate: it does not ask. Leaving an article
+    /// with edits in it writes them, the same promise `appDidEnterBackground` and the
+    /// macOS quit flow already make on every other way out.
+    @Test("unsaved edits are saved on the way out, with nothing asked")
+    func unsavedEditsAreSavedNotQueried() async throws {
         let open = summary("pure-functions")
         let target = summary("side-effects", number: 2)
         var initial = AppState()
@@ -211,14 +234,18 @@ struct AppNavigationTests {
             state.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavedDocument)
         }
 
+        // Held on the old article until the save lands, and no question anywhere.
         #expect(store.state.openEditor?.opened == open)
-        #expect(store.state.discardPrompt == .articleEditor(target))
+        #expect(store.state.discardPrompt == nil)
+        await expectSave(store)
     }
 
-    /// The gate is about losing *someone else's* edits. Re-opening the article already on
-    /// screen loses nothing, so it must not ask.
-    @Test("re-opening the article already on screen never asks about discarding")
-    func reopeningTheSameArticleAsksNothing() async throws {
+    /// Re-opening the article already on screen used to be exempt from the gate, on the
+    /// grounds that it discards nothing — except ``AppState/commit(_:)`` rebuilds the
+    /// entry either way, so the edits went with it, silently. Saving first is what makes
+    /// the exemption unnecessary rather than merely wrong.
+    @Test("re-opening the article already on screen saves its edits instead of dropping them")
+    func reopeningTheSameArticleSavesFirst() async throws {
         let open = summary("pure-functions")
         var initial = AppState()
         initial.path = [.articleEditor(dirtyEditor(for: open))]
@@ -226,22 +253,63 @@ struct AppNavigationTests {
         let store = makeStore(initial: initial)
 
         store.dispatch(.navigation(.push(.articleEditor(open)))) { state in
-            // Rebuilt fresh, so the unsaved edits go with it — but no question was asked,
-            // because the user asked for the article they were already on.
-            state.path = [.articleEditor(ArticleEditorFeature.State(opening: open))]
+            state.pendingNavigation = PendingNavigation(request: .articleEditor(open), gate: .unsavedDocument)
         }
 
-        #expect(store.state.pendingNavigation == nil)
-        // Rebuilt empty and told to reload, so "open what I am already on" ends on the
-        // article rather than on a spinner nothing would ever clear.
-        await expectStart(store)
+        // Nothing is rebuilt yet, so the edits are still there to be written.
+        #expect(store.state.openEditor?.document?.hasUnsavedChanges == true)
+        await expectSave(store)
     }
 
-    /// Gates are ordered and each answer resumes at the *next* one. This is the case that
-    /// made the two-gate resume worth writing down: answering the chat must hand over to
-    /// the discard question rather than pushing straight through it.
-    @Test("answering the chat gate hands over to the discard gate, not to the push")
-    func resumingFromTheChatGateFallsIntoTheDiscardGate() async throws {
+    /// A document the app cannot write without overruling the copy on disk is the one
+    /// case where the user really does have to choose — so this gate asks, and, sitting
+    /// *after* the saving gate in the walk, is reached without a save being attempted.
+    @Test("a conflicted article is never written on the user's behalf — it asks instead")
+    func conflictedEditsAskRatherThanSave() async throws {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        var initial = AppState()
+        initial.path = [.articleEditor(conflictedEditor(for: open))]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial)
+
+        store.dispatch(.navigation(.push(.articleEditor(target)))) { state in
+            state.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavableDocument)
+        }
+
+        #expect(store.state.openEditor?.opened == open)
+        #expect(store.state.discardPrompt == .fileChangedOnDisk)
+    }
+
+    /// The save came back with a failure, so the switch cannot go through quietly any
+    /// more. Carrying that on the *pending ask* rather than reading `saveError` back out
+    /// of the editor is what stops a stale failure from making every later switch ask
+    /// instead of simply trying again.
+    @Test("a failed save turns the quiet switch into the one question worth asking")
+    func aFailedSaveRaisesTheDiscardPrompt() async throws {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        var editor = dirtyEditor(for: open)
+        editor.saveError = "Couldn't write /tmp/Articles/pure-functions.json: disk full"
+        var initial = AppState()
+        initial.path = [.articleEditor(editor)]
+        initial.articleList.selectedSlug = open.slug
+        initial.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavedDocument)
+        let store = makeStore(initial: initial)
+
+        store.dispatch(.navigation(.pendingSaveFailed)) { state in
+            state.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavableDocument)
+        }
+
+        #expect(store.state.openEditor?.opened == open)
+        #expect(store.state.discardPrompt == .saveFailed(editor.saveError ?? ""))
+    }
+
+    /// Gates are ordered and each resolution resumes at the *next* one. This is the case
+    /// that made the multi-gate resume worth writing down: answering the chat must hand
+    /// over to the edits rather than pushing straight past them.
+    @Test("answering the chat gate hands over to saving the edits, not to the push")
+    func resumingFromTheChatGateFallsIntoTheSavingGate() async throws {
         let open = summary("pure-functions")
         let target = summary("side-effects", number: 2)
         var initial = AppState()
@@ -257,19 +325,43 @@ struct AppNavigationTests {
 
         #expect(store.state.path.count == 1)
         #expect(store.state.openEditor?.opened == open)
+        await expectSave(store)
+    }
+
+    /// A landed save is the saving gate's "satisfied" signal, delivered through the very
+    /// same `resumePending` a user's answer would use — the document is clean by then, so
+    /// the walk finds nothing left to settle and the ask goes through.
+    @Test("a save that lands lets the parked ask straight through")
+    func aLandedSaveResumesTheAsk() async throws {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        var initial = AppState()
+        // Clean, because by the time the resume arrives the save has re-baselined it.
+        initial.path = [.articleEditor(editor(for: open))]
+        initial.articleList.selectedSlug = open.slug
+        initial.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavedDocument)
+        let store = makeStore(initial: initial)
+
+        store.dispatch(.navigation(.resumePending)) { state in
+            state.pendingNavigation = nil
+            state.path = [.articleEditor(ArticleEditorFeature.State(opening: target))]
+            state.articleList.selectedSlug = target.slug
+        }
+        await expectStart(store)
     }
 
     /// The mirror image, and the reason a gate resumes at its *successor* rather than
     /// being re-evaluated from the start: the same dirty document is still there, so a
-    /// naive re-check would park on it again, forever.
-    @Test("answering the discard gate pushes, without re-asking the question just answered")
-    func resumingFromTheDiscardGateActuallyPushes() async throws {
+    /// naive re-check would park on it again, forever — and, worse, would now try to save
+    /// the very edits the user just said to abandon.
+    @Test("answering the discard prompt pushes, without re-asking or re-saving")
+    func resumingFromTheDiscardPromptActuallyPushes() async throws {
         let open = summary("pure-functions")
         let target = summary("side-effects", number: 2)
         var initial = AppState()
-        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.path = [.articleEditor(conflictedEditor(for: open))]
         initial.articleList.selectedSlug = open.slug
-        initial.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavedDocument)
+        initial.pendingNavigation = PendingNavigation(request: .articleEditor(target), gate: .unsavableDocument)
         let store = makeStore(initial: initial)
 
         store.dispatch(.navigation(.resumePending)) { state in
@@ -284,11 +376,11 @@ struct AppNavigationTests {
     func cancelPendingDropsTheAsk() async throws {
         let open = summary("pure-functions")
         var initial = AppState()
-        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.path = [.articleEditor(conflictedEditor(for: open))]
         initial.articleList.selectedSlug = open.slug
         initial.pendingNavigation = PendingNavigation(
             request: .articleEditor(summary("side-effects", number: 2)),
-            gate: .unsavedDocument
+            gate: .unsavableDocument
         )
         let store = makeStore(initial: initial)
 
@@ -296,6 +388,7 @@ struct AppNavigationTests {
 
         #expect(store.state.discardPrompt == nil)
         #expect(store.state.openEditor?.opened == open)
+        #expect(store.state.openEditor?.document?.hasUnsavedChanges == true)
     }
 
     // MARK: - Presentations

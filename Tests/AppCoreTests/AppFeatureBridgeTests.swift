@@ -4,6 +4,7 @@ import ArticleEditorFeature
 import Foundation
 import GeneratorCore
 import GitHubSyncFeature
+import ReactiveConcurrency
 import SwiftRex
 import SwiftRexTesting
 import Testing
@@ -50,7 +51,9 @@ struct AppFeatureBridgeTests {
     /// is exactly why one drain isn't enough.
     private func settle(_ store: TestStore<AppAction, AppState, AppCore.World>) async {
         var applied = 0
-        for _ in 0..<8 {
+        // The longest chain in the app is a switch away from an unsaved article:
+        // select → push → save → saved → resumePending → start → opened.
+        for _ in 0..<12 {
             await store.runEffects()
             let received = store.receivedActions
             guard received.count > applied else { return }
@@ -120,17 +123,7 @@ struct AppFeatureBridgeTests {
     func selectingASecondArticleLoadsIt() async {
         let first = summary("pure-functions")
         let second = summary("side-effects", number: 2)
-        let store = makeStore(world: .mock(openDocument: { url in
-            .just((
-                article: Article(
-                    title: "Loaded \(url.lastPathComponent)",
-                    slug: url.deletingPathExtension().lastPathComponent,
-                    emphasis: .text,
-                    blocks: [.paragraph("Body")]
-                ),
-                blockIDs: [blockID]
-            ))
-        }))
+        let store = makeStore(world: .mock(openDocument: loadingOpenDocument))
 
         store.dispatch(.articleList(.select(first))) { _ in }
         await settle(store)
@@ -143,7 +136,102 @@ struct AppFeatureBridgeTests {
         #expect(store.state.openEditor?.document?.title == "Loaded side-effects.json")
     }
 
-    private let blockID = UUID(uuidString: "00000000-0000-0000-0000-0000000000B1")!
+    // MARK: - Leaving an article with unsaved edits
+
+    /// The autosave promise, through the real fold: no question, the edits reach the
+    /// environment, and the switch completes on its own. Every hop is a separate bridge —
+    /// the gate takes the save, the save's outcome resumes the ask, the resume commits
+    /// and starts the next screen — so this is the only test that proves they connect.
+    @Test("switching away from unsaved edits writes them, then goes through")
+    func switchingAwayFromUnsavedEditsSavesFirst() async {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        let saved = SavedDocuments()
+        var initial = AppState()
+        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            openDocument: loadingOpenDocument,
+            saveDocument: { document in
+                saved.record(document)
+                return .just("hash-after-save")
+            }
+        ))
+
+        store.dispatch(.articleList(.select(target))) { _ in }
+        await settle(store)
+
+        // The edits left the app rather than quietly going away with the screen.
+        #expect(saved.titles == ["Edited, and not saved"])
+        #expect(store.state.discardPrompt == nil)
+        #expect(store.state.pendingNavigation == nil)
+        // And the switch the user actually asked for happened, fully loaded.
+        #expect(store.state.openEditor?.opened == target)
+        #expect(store.state.openEditor?.document?.title == "Loaded side-effects.json")
+    }
+
+    /// The other edge of that promise: a save taken on the user's behalf that fails must
+    /// not lose the work it was standing in for. The switch stops where it is and becomes
+    /// the one question worth asking.
+    @Test("a save that fails holds the switch and asks instead of discarding")
+    func aFailedAutosaveHoldsTheSwitch() async {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        var initial = AppState()
+        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            openDocument: loadingOpenDocument,
+            saveDocument: { _ in .fail(.fileWriteFailed(path: "/tmp/Articles/pure-functions.json", reason: "disk full")) }
+        ))
+
+        store.dispatch(.articleList(.select(target))) { _ in }
+        await settle(store)
+
+        #expect(store.state.openEditor?.opened == open)
+        #expect(store.state.openEditor?.document?.hasUnsavedChanges == true)
+        #expect(store.state.discardPrompt == .saveFailed("Couldn't write /tmp/Articles/pure-functions.json: disk full"))
+
+        // Answering it is the user choosing to lose the work — which is theirs to choose.
+        store.dispatch(.navigation(.resumePending)) { state in
+            state.pendingNavigation = nil
+            state.path = [.articleEditor(ArticleEditorFeature.State(opening: target))]
+            state.articleList.selectedSlug = target.slug
+        }
+        await settle(store)
+
+        #expect(store.state.openEditor?.opened == target)
+        #expect(store.state.discardPrompt == nil)
+    }
+
+    private func dirtyEditor(for summary: ArticleSummary) -> ArticleEditorFeature.State {
+        var editor = editor(for: summary)
+        editor.document?.title = "Edited, and not saved"
+        return editor
+    }
+
+    /// An `openDocument` that actually returns something, named after the file asked for,
+    /// so a test can tell *which* article ended up on screen.
+    private let loadingOpenDocument: @Sendable (URL) -> Publisher<(article: Article, blockIDs: [UUID]), ArticleEditorError> = { url in
+        .just((
+            article: Article(
+                title: "Loaded \(url.lastPathComponent)",
+                slug: url.deletingPathExtension().lastPathComponent,
+                emphasis: .text,
+                blocks: [.paragraph("Body")]
+            ),
+            blockIDs: [UUID(uuidString: "00000000-0000-0000-0000-0000000000B1")!]
+        ))
+    }
+
+    /// Records what reached `saveDocument`, so a test can assert the user's edits actually
+    /// left the app rather than merely failing to raise a dialog. Exercised serially from
+    /// a single `@MainActor` test, so the lack of real synchronization is safe despite
+    /// `@unchecked Sendable`.
+    private final class SavedDocuments: @unchecked Sendable {
+        private(set) var titles: [String] = []
+        func record(_ document: OpenDocument) { titles.append(document.title) }
+    }
 
     // MARK: - The chat gate, end to end
 
