@@ -47,6 +47,16 @@ struct AppNavigationTests {
         return editor
     }
 
+    /// Every commit is followed by the screen's `.start` — navigation's own doing, because
+    /// a push onto an already-open editor reuses the view in place and `onAppear` never
+    /// fires again. Draining it here is what makes each push test assert it happened.
+    private func expectStart(_ store: TestStore<AppAction, AppState, AppCore.World>) async {
+        await store.runEffects()
+        store.receive(AppAction.prism.articleEditor) { action, _ in
+            #expect(ArticleEditorFeature.Action.prism.start.preview(action) != nil)
+        }
+    }
+
     private func dirtyEditor(for summary: ArticleSummary) -> ArticleEditorFeature.State {
         var editor = editor(for: summary)
         editor.document?.title = "Edited, and not saved"
@@ -67,8 +77,10 @@ struct AppNavigationTests {
         }
 
         #expect(store.state.routes == [.articleEditor])
-        // Nothing is loaded yet — that is the screen's own `.start`, not navigation's job.
+        // Nothing is loaded *yet* — the screen is built empty and told to load itself,
+        // which is the `.start` drained below.
         #expect(store.state.openEditor?.document == nil)
+        await expectStart(store)
     }
 
     /// Opening a second article must not stack a second editor, and must not make SwiftUI
@@ -91,6 +103,10 @@ struct AppNavigationTests {
 
         #expect(store.state.path.count == 1)
         #expect(store.state.routes == routesBefore)
+        // And precisely because `routes` is unchanged, SwiftUI keeps the very same view
+        // alive — so the replacement screen would never load a thing if navigation did
+        // not start it. This is the iPad two-pane blank editor, caught at store level.
+        await expectStart(store)
     }
 
     @Test("push re-derives the sidebar highlight, and popping clears it")
@@ -102,6 +118,7 @@ struct AppNavigationTests {
             state.path = [.articleEditor(ArticleEditorFeature.State(opening: target))]
             state.articleList.selectedSlug = target.slug
         }
+        await expectStart(store)
 
         store.dispatch(.navigation(.pop)) { state in
             state.path = []
@@ -215,6 +232,9 @@ struct AppNavigationTests {
         }
 
         #expect(store.state.pendingNavigation == nil)
+        // Rebuilt empty and told to reload, so "open what I am already on" ends on the
+        // article rather than on a spinner nothing would ever clear.
+        await expectStart(store)
     }
 
     /// Gates are ordered and each answer resumes at the *next* one. This is the case that
@@ -257,6 +277,7 @@ struct AppNavigationTests {
             state.path = [.articleEditor(ArticleEditorFeature.State(opening: target))]
             state.articleList.selectedSlug = target.slug
         }
+        await expectStart(store)
     }
 
     @Test("cancelling drops the parked ask and leaves the user where they were")

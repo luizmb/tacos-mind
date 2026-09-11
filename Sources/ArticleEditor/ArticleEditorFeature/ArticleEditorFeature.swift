@@ -49,10 +49,15 @@ public enum ArticleEditorFeature {
 
     @Prisms
     public enum Action: Sendable {
-        /// Dispatched by the view's `onAppear`. Loads `state.opened` — switching articles
-        /// is a *new screen*, not a message to an existing one, so there is no `.open(URL)`
-        /// and no "am I allowed to replace what's here?" gate; the app answers that
-        /// question before this screen is ever built (see `AppNavigation`'s gates).
+        /// Dispatched by navigation, the moment it commits the screen this state belongs
+        /// to. Loads `state.opened` — switching articles is a *new screen*, not a message
+        /// to an existing one, so there is no `.open(URL)` and no "am I allowed to replace
+        /// what's here?" gate; the app answers that question before this screen is ever
+        /// built (see `AppNavigation`'s gates).
+        ///
+        /// Deliberately *not* driven by the view's `onAppear`: a push onto an already-open
+        /// editor replaces the stack element in place, so the view is never torn down and
+        /// `onAppear` never fires a second time.
         case start
         /// Carries the URL that was actually loaded, so a load still in flight for the
         /// article the user just navigated away from cannot land in the screen that
@@ -177,7 +182,6 @@ public enum ArticleEditorFeature {
 
     @Prisms
     public enum ViewAction: Sendable {
-        case onAppear
         case setTitle(String)
         case setSlug(String)
         case setAuthor(String)
@@ -237,7 +241,6 @@ public enum ArticleEditorFeature {
     public static let mapAction = Reader<Environment, @Sendable (ViewAction) -> Action> { _ in
         { viewAction in
             switch viewAction {
-            case .onAppear: .start
             case .setTitle(let value): .setTitle(value)
             case .setSlug(let value): .setSlug(value)
             case .setAuthor(let value): .setAuthor(value)

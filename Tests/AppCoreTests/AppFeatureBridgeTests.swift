@@ -28,11 +28,14 @@ struct AppFeatureBridgeTests {
     }
 
     // `World` alone is ambiguous here: `GeneratorCore` has one too.
-    private func makeStore(initial: AppState = .init()) -> TestStore<AppAction, AppState, AppCore.World> {
+    private func makeStore(
+        initial: AppState = .init(),
+        world: AppCore.World = .mock()
+    ) -> TestStore<AppAction, AppState, AppCore.World> {
         TestStore(
             initial: initial,
             behavior: AppFeature.behavior(),
-            environment: AppCore.World.mock(),
+            environment: world,
             exhaustive: false
         )
     }
@@ -107,6 +110,40 @@ struct AppFeatureBridgeTests {
         #expect(store.state.openEditor?.opened == second)
         #expect(store.state.articleList.selectedSlug == second.slug)
     }
+
+    /// Replacing in place is what keeps SwiftUI from tearing the editor down — and that is
+    /// exactly why the replacement screen cannot load itself from `onAppear`, which never
+    /// fires a second time. Invisible on iPhone (you pop back before picking another
+    /// article), permanent on iPad's two-pane layout: every article after the first opened
+    /// on a spinner that nothing would ever clear.
+    @Test("the replacing editor loads its own article, with no view lifecycle to lean on")
+    func selectingASecondArticleLoadsIt() async {
+        let first = summary("pure-functions")
+        let second = summary("side-effects", number: 2)
+        let store = makeStore(world: .mock(openDocument: { url in
+            .just((
+                article: Article(
+                    title: "Loaded \(url.lastPathComponent)",
+                    slug: url.deletingPathExtension().lastPathComponent,
+                    emphasis: .text,
+                    blocks: [.paragraph("Body")]
+                ),
+                blockIDs: [blockID]
+            ))
+        }))
+
+        store.dispatch(.articleList(.select(first))) { _ in }
+        await settle(store)
+
+        #expect(store.state.openEditor?.document?.title == "Loaded pure-functions.json")
+
+        store.dispatch(.articleList(.select(second))) { _ in }
+        await settle(store)
+
+        #expect(store.state.openEditor?.document?.title == "Loaded side-effects.json")
+    }
+
+    private let blockID = UUID(uuidString: "00000000-0000-0000-0000-0000000000B1")!
 
     // MARK: - The chat gate, end to end
 

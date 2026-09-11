@@ -104,14 +104,14 @@ func navigationBehavior() -> Behavior<AppAction, AppState, World> {
                 return .reduce { $0.pendingNavigation = PendingNavigation(request: request, gate: .unsavedDocument) }
 
             case nil:
-                return .reduce { $0.commit(request) }
+                return commit(request)
             }
 
         case .resumePending:
             guard let pending = stateBefore.pendingNavigation else { return .doNothing }
             guard let next = pending.gate.successor,
                   let blocking = stateBefore.gate(for: pending.request, startingAt: next)
-            else { return .reduce { $0.commit(pending.request) } }
+            else { return commit(pending.request) }
             return .reduce { $0.pendingNavigation = PendingNavigation(request: pending.request, gate: blocking) }
 
         case .cancelPending:
@@ -154,6 +154,31 @@ func navigationBehavior() -> Behavior<AppAction, AppState, World> {
 
         case .dismissGitHubSync:
             return .reduce { $0.gitHubSync = $0.gitHubSync.dismiss() }
+        }
+    }
+}
+
+/// Puts `request`'s screen on the stack **and tells it to load**.
+///
+/// The load cannot hang off the screen's own `onAppear`: opening a second article
+/// *replaces* the top element rather than pushing a new one (see ``AppState/commit(_:)``),
+/// so SwiftUI keeps the very same view alive, `onAppear` never fires again, and the
+/// freshly built — deliberately empty — state would sit on its spinner forever. That is
+/// invisible on iPhone, where you have to pop back before picking another article, and
+/// permanent on iPad's two-pane layout, where every article after the first opened blank.
+///
+/// Navigation is what brings a screen into existence, so navigation is what starts it.
+/// Both commit sites go through here, which is also why a resumed push cannot forget.
+private func commit(_ request: NavigationRequest) -> Reaction<AppAction, AppState, World> {
+    .reduce { $0.commit(request) }
+        .produce { _ in AppAction.immediateDispatch(request.start) }
+}
+
+private extension NavigationRequest {
+    /// The action that tells the screen this ask just built to load itself.
+    var start: AppAction {
+        switch self {
+        case .articleEditor: .articleEditor(.start)
         }
     }
 }
