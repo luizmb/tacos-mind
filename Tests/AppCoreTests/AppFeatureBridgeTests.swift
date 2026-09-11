@@ -4,6 +4,7 @@ import ArticleEditorFeature
 import Foundation
 import GeneratorCore
 import GitHubSyncFeature
+import ReactiveConcurrency
 import SwiftRex
 import SwiftRexTesting
 import Testing
@@ -28,11 +29,14 @@ struct AppFeatureBridgeTests {
     }
 
     // `World` alone is ambiguous here: `GeneratorCore` has one too.
-    private func makeStore(initial: AppState = .init()) -> TestStore<AppAction, AppState, AppCore.World> {
+    private func makeStore(
+        initial: AppState = .init(),
+        world: AppCore.World = .mock()
+    ) -> TestStore<AppAction, AppState, AppCore.World> {
         TestStore(
             initial: initial,
             behavior: AppFeature.behavior(),
-            environment: AppCore.World.mock(),
+            environment: world,
             exhaustive: false
         )
     }
@@ -47,7 +51,9 @@ struct AppFeatureBridgeTests {
     /// is exactly why one drain isn't enough.
     private func settle(_ store: TestStore<AppAction, AppState, AppCore.World>) async {
         var applied = 0
-        for _ in 0..<8 {
+        // The longest chain in the app is a switch away from an unsaved article:
+        // select → push → save → saved → resumePending → start → opened.
+        for _ in 0..<12 {
             await store.runEffects()
             let received = store.receivedActions
             guard received.count > applied else { return }
@@ -106,6 +112,221 @@ struct AppFeatureBridgeTests {
         #expect(store.state.path.count == 1)
         #expect(store.state.openEditor?.opened == second)
         #expect(store.state.articleList.selectedSlug == second.slug)
+    }
+
+    /// Replacing in place is what keeps SwiftUI from tearing the editor down — and that is
+    /// exactly why the replacement screen cannot load itself from `onAppear`, which never
+    /// fires a second time. Invisible on iPhone (you pop back before picking another
+    /// article), permanent on iPad's two-pane layout: every article after the first opened
+    /// on a spinner that nothing would ever clear.
+    @Test("the replacing editor loads its own article, with no view lifecycle to lean on")
+    func selectingASecondArticleLoadsIt() async {
+        let first = summary("pure-functions")
+        let second = summary("side-effects", number: 2)
+        let store = makeStore(world: .mock(openDocument: loadingOpenDocument))
+
+        store.dispatch(.articleList(.select(first))) { _ in }
+        await settle(store)
+
+        #expect(store.state.openEditor?.document?.title == "Loaded pure-functions.json")
+
+        store.dispatch(.articleList(.select(second))) { _ in }
+        await settle(store)
+
+        #expect(store.state.openEditor?.document?.title == "Loaded side-effects.json")
+    }
+
+    // MARK: - Leaving an article with unsaved edits
+
+    /// The autosave promise, through the real fold: no question, the edits reach the
+    /// environment, and the switch completes on its own. Every hop is a separate bridge —
+    /// the gate takes the save, the save's outcome resumes the ask, the resume commits
+    /// and starts the next screen — so this is the only test that proves they connect.
+    @Test("switching away from unsaved edits writes them, then goes through")
+    func switchingAwayFromUnsavedEditsSavesFirst() async {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        let saved = SavedDocuments()
+        var initial = AppState()
+        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            openDocument: loadingOpenDocument,
+            saveDocument: { document in
+                saved.record(document)
+                return .just("hash-after-save")
+            }
+        ))
+
+        store.dispatch(.articleList(.select(target))) { _ in }
+        await settle(store)
+
+        // The edits left the app rather than quietly going away with the screen.
+        #expect(saved.titles == ["Edited, and not saved"])
+        #expect(store.state.discardPrompt == nil)
+        #expect(store.state.pendingNavigation == nil)
+        // And the switch the user actually asked for happened, fully loaded.
+        #expect(store.state.openEditor?.opened == target)
+        #expect(store.state.openEditor?.document?.title == "Loaded side-effects.json")
+    }
+
+    /// The other edge of that promise: a save taken on the user's behalf that fails must
+    /// not lose the work it was standing in for. The switch stops where it is and becomes
+    /// the one question worth asking.
+    @Test("a save that fails holds the switch and asks instead of discarding")
+    func aFailedAutosaveHoldsTheSwitch() async {
+        let open = summary("pure-functions")
+        let target = summary("side-effects", number: 2)
+        var initial = AppState()
+        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            openDocument: loadingOpenDocument,
+            saveDocument: { _ in .fail(.fileWriteFailed(path: "/tmp/Articles/pure-functions.json", reason: "disk full")) }
+        ))
+
+        store.dispatch(.articleList(.select(target))) { _ in }
+        await settle(store)
+
+        #expect(store.state.openEditor?.opened == open)
+        #expect(store.state.openEditor?.document?.hasUnsavedChanges == true)
+        #expect(store.state.discardPrompt == .saveFailed("Couldn't write /tmp/Articles/pure-functions.json: disk full"))
+
+        // Answering it is the user choosing to lose the work — which is theirs to choose.
+        store.dispatch(.navigation(.resumePending)) { state in
+            state.pendingNavigation = nil
+            state.path = [.articleEditor(ArticleEditorFeature.State(opening: target))]
+            state.articleList.selectedSlug = target.slug
+        }
+        await settle(store)
+
+        #expect(store.state.openEditor?.opened == target)
+        #expect(store.state.discardPrompt == nil)
+    }
+
+    private func dirtyEditor(for summary: ArticleSummary) -> ArticleEditorFeature.State {
+        var editor = editor(for: summary)
+        editor.document?.title = "Edited, and not saved"
+        return editor
+    }
+
+    // MARK: - Keeping the article index honest
+
+    /// The sidebar is a listing of a directory, taken once. Anything that rewrites a file
+    /// afterwards leaves it describing a file as it no longer is — here, a renamed article
+    /// kept its old title in the sidebar until the app was relaunched.
+    @Test("a save re-reads the index, so a renamed article doesn't keep its old title")
+    func aSaveRefreshesTheSidebar() async {
+        let open = summary("pure-functions")
+        let renamed = ArticleSummary(url: open.url, slug: open.slug, title: "Renamed On Disk", number: 1)
+        let directory = ArticleIndex([open])
+        var initial = AppState()
+        initial.path = [.articleEditor(dirtyEditor(for: open))]
+        initial.articleList.summaries = [open]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            listArticles: { .just(directory.summaries) },
+            saveDocument: { _ in
+                // Writing the file is what makes the old listing wrong.
+                directory.set([renamed])
+                return .just("hash-after-save")
+            }
+        ))
+
+        store.dispatch(.articleEditor(.save), source: ActionSource(file: #fileID, function: #function, line: #line))
+        await settle(store)
+
+        #expect(store.state.articleList.summaries == [renamed])
+    }
+
+    /// A pull writes whole files, including articles no screen has open — before this,
+    /// they didn't appear in the sidebar at all until the next launch.
+    @Test("a GitHub pull re-reads the index, so newly pulled articles show up")
+    func aPullRefreshesTheSidebar() async {
+        let existing = summary("pure-functions")
+        let pulled = summary("from-github", number: 7)
+        let directory = ArticleIndex([existing, pulled])
+        var initial = AppState()
+        initial.articleList.summaries = [existing]
+        let store = makeStore(initial: initial, world: .mock(listArticles: { .just(directory.summaries) }))
+
+        store.dispatch(
+            .gitHubSync(.pullApplied(.success(PullOutcome(applied: 1, keptLocal: [])))),
+            source: ActionSource(file: #fileID, function: #function, line: #line)
+        )
+        await settle(store)
+
+        #expect(store.state.articleList.summaries == [existing, pulled])
+    }
+
+    /// A save can move the very slug the highlight matches on. The editor re-describes its
+    /// own summary, and the highlight is re-derived from it in the same pass, so the two
+    /// cannot end up pointing at different rows.
+    @Test("renaming an article's slug and saving keeps the sidebar highlight on it")
+    func aRenamedSlugKeepsItsHighlight() async {
+        let open = summary("pure-functions")
+        let renamed = ArticleSummary(url: open.url, slug: "renamed", title: "Renamed", number: 1)
+        let directory = ArticleIndex([open])
+        // The listing and the file agree on the number; only the name is being changed.
+        var editor = ArticleEditorFeature.State(opening: open)
+        var document = OpenDocument(
+            url: open.url,
+            article: Article(title: open.title, slug: open.slug, emphasis: .text, number: open.number, blocks: [.paragraph("Body")])
+        )
+        document.slug = "renamed"
+        document.title = "Renamed"
+        editor.document = document
+        var initial = AppState()
+        initial.path = [.articleEditor(editor)]
+        initial.articleList.summaries = [open]
+        initial.articleList.selectedSlug = open.slug
+        let store = makeStore(initial: initial, world: .mock(
+            listArticles: { .just(directory.summaries) },
+            saveDocument: { _ in
+                directory.set([renamed])
+                return .just("hash-after-save")
+            }
+        ))
+
+        store.dispatch(.articleEditor(.save), source: ActionSource(file: #fileID, function: #function, line: #line))
+        await settle(store)
+
+        #expect(store.state.articleList.summaries == [renamed])
+        #expect(store.state.articleList.selectedSlug == "renamed")
+        #expect(store.state.openEditor?.opened == renamed)
+    }
+
+    /// A stand-in for the Articles directory, so a test can change what the *next* listing
+    /// answers — which is the whole point of a refresh. Exercised serially from a single
+    /// `@MainActor` test, so the lack of real synchronization is safe despite
+    /// `@unchecked Sendable`.
+    private final class ArticleIndex: @unchecked Sendable {
+        private(set) var summaries: [ArticleSummary]
+        init(_ summaries: [ArticleSummary]) { self.summaries = summaries }
+        func set(_ summaries: [ArticleSummary]) { self.summaries = summaries }
+    }
+
+    /// An `openDocument` that actually returns something, named after the file asked for,
+    /// so a test can tell *which* article ended up on screen.
+    private let loadingOpenDocument: @Sendable (URL) -> Publisher<(article: Article, blockIDs: [UUID]), ArticleEditorError> = { url in
+        .just((
+            article: Article(
+                title: "Loaded \(url.lastPathComponent)",
+                slug: url.deletingPathExtension().lastPathComponent,
+                emphasis: .text,
+                blocks: [.paragraph("Body")]
+            ),
+            blockIDs: [UUID(uuidString: "00000000-0000-0000-0000-0000000000B1")!]
+        ))
+    }
+
+    /// Records what reached `saveDocument`, so a test can assert the user's edits actually
+    /// left the app rather than merely failing to raise a dialog. Exercised serially from
+    /// a single `@MainActor` test, so the lack of real synchronization is safe despite
+    /// `@unchecked Sendable`.
+    private final class SavedDocuments: @unchecked Sendable {
+        private(set) var titles: [String] = []
+        func record(_ document: OpenDocument) { titles.append(document.title) }
     }
 
     // MARK: - The chat gate, end to end

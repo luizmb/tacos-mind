@@ -125,6 +125,22 @@ public enum AppFeature {
 
         <> AppScopes.articleEditor.behavior(of: ArticleEditorFeature.self)
             .on(.action(\.articleEditor.openChat), dispatch: .action(review: const(.navigation(.presentChat))))
+            // The other half of the `unsavedDocument` gate: a save nobody asked for, taken
+            // because the user navigated away, reports back here. Landing satisfies the
+            // gate like any answered question would; failing turns the ask into the one
+            // question worth putting up. Same shape as `waitForSaveThenQuitBridge`, and
+            // guarded the same way — an unrelated save (the toolbar button, a background
+            // suspend) leaves `pendingNavigation` nil, so this cannot misfire.
+            .on(
+                .action(\.articleEditor.saved),
+                when: isSavingBeforeNavigating,
+                dispatch: .action(review: { result in
+                    switch result {
+                    case .success: .navigation(.resumePending)
+                    case .failure: .navigation(.pendingSaveFailed)
+                    }
+                })
+            )
 
         <> AppScopes.chat.behavior(of: AIChatFeature.self)
             .on(.action(\.chat.notesCompacted), dispatch: .action(review: { .articleEditor(.setBrainstorming($0)) }))
@@ -146,6 +162,7 @@ public enum AppFeature {
             .on(.action(\.gitHubSync.firstSyncCompleted), dispatch: .action(review: const(.navigation(.dismissGitHubSync))))
 
         <> chatContextSyncBehavior()
+        <> articleIndexSyncBehavior()
         <> quitBehavior()
     }
 }
@@ -154,6 +171,10 @@ public enum AppFeature {
 /// guard on the "close needs no confirmation" bridge; also the condition
 /// ``NavigationGate/chatSession`` inverts.
 private let hasNoLiveChatSession: @Sendable (AppState) -> Bool = { $0.chat.wrapped?.turns.isEmpty ?? true }
+
+/// Whether the save now finishing is one navigation took on the user's behalf, rather
+/// than one they asked for.
+private let isSavingBeforeNavigating: @Sendable (AppState) -> Bool = { $0.pendingNavigation?.gate == .unsavedDocument }
 
 // Familiar spellings for the app triad — `AppFeature.State` everywhere would only add noise.
 public typealias AppState = AppFeature.State
@@ -174,10 +195,41 @@ public extension AppState {
         path.compactMap(StackEntry.prism.articleEditor.preview).last
     }
 
-    /// The ask waiting on the "discard unsaved changes?" question, if that is the gate
-    /// currently holding it. A genuine `Optional`, so `presence` is the right primitive.
-    var discardPrompt: NavigationRequest? {
-        pendingNavigation.flatMap { $0.gate == .unsavedDocument ? $0.request : nil }
+    /// The "open anyway?" question, if that is the gate currently holding an ask.
+    ///
+    /// It resolves to the *problem*, not the request, so the dialog's presence and its
+    /// wording come from a single value and cannot disagree — and so the reason survives
+    /// into SwiftUI's `presenting:` argument while the dialog animates away. A genuine
+    /// `Optional`, so `presence` is the right primitive.
+    var discardPrompt: UnsavedEditsProblem? {
+        guard pendingNavigation?.gate == .unsavableDocument, let editor = openEditor else { return nil }
+        if case .conflict = editor.document?.externalChange { return .fileChangedOnDisk }
+        return editor.saveError.map(UnsavedEditsProblem.saveFailed)
+    }
+
+    /// Why the open article's edits could not simply be written when the user navigated
+    /// away — the only two ways that happens.
+    enum UnsavedEditsProblem: Sendable, Equatable {
+        /// The file changed underneath the editor, so there is no version to save that
+        /// doesn't overrule someone.
+        case fileChangedOnDisk
+        /// The save was attempted and the disk said no.
+        case saveFailed(String)
+
+        /// What the dialog tells the user. It has to carry the whole explanation: the
+        /// title is fixed, because SwiftUI evaluates it outside the `presenting:` closure.
+        var message: String {
+            switch self {
+            case .fileChangedOnDisk:
+                """
+                This article also changed on disk, so your edits can't be saved for you \
+                without overwriting that. Opening another article now discards them — \
+                resolve the conflict first if you want to keep them.
+                """
+            case .saveFailed(let reason):
+                "Your edits couldn't be saved: \(reason). Opening another article now discards them."
+            }
+        }
     }
 }
 
@@ -235,6 +287,40 @@ private func chatContextSyncBehavior() -> Behavior<AppAction, AppState, World> {
             return .reduce { $0.chat.wrapped?.brainstorming = result.article.brainstorming }
         case .articleEditor(.reloaded(_, .success(let result))):
             return .reduce { $0.chat.wrapped?.brainstorming = result.article.brainstorming }
+        default:
+            return .doNothing
+        }
+    }
+}
+
+// MARK: - Article index sync
+//
+// The list of articles is a fact about the Articles directory, and two screens keep their
+// own copy of it: the sidebar, and the editor's link picker. Each loads it once, in its
+// own `.start`, so anything that rewrites a file afterwards leaves them describing a file
+// as it no longer is — a renamed article kept its old title in the sidebar until the app
+// was relaunched, and articles a GitHub pull had just written did not show up at all.
+//
+// Everything here is a *re-derivation*, never a patch. The two copies are re-read from
+// disk rather than edited in place, so no second answer to "what is a summary" appears
+// here; and the sidebar highlight is re-run through navigation's own
+// `syncSidebarSelection`, so this does not become a second writer of it with an opinion
+// of its own. That matters because a save can move the very slug the highlight matches on
+// (see `ArticleSummary.reflecting(_:)`), and the editor has just updated `opened` by the
+// time this runs.
+
+private func articleIndexSyncBehavior() -> Behavior<AppAction, AppState, World> {
+    Behavior<AppAction, AppState, World>.handle { action, _ in
+        switch action {
+        // The open article was written — its title, number or slug may have moved with it.
+        case .articleEditor(.saved(.success)),
+             // It was rewritten underneath us, and the editor took the disk's version.
+             .articleEditor(.reloaded(_, .success)),
+             // A pull writes whole files, including articles no screen has open.
+             .gitHubSync(.pullApplied(.success)):
+            return .reduce { $0.syncSidebarSelection() }
+                .produce { _ in AppAction.immediateDispatch(.articleList(.start)) }
+                .produce { _ in AppAction.immediateDispatch(.articleEditor(.refreshSummaries)) }
         default:
             return .doNothing
         }

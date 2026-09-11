@@ -2,6 +2,9 @@ import AppDomain
 import Foundation
 import GeneratorCore
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public struct ArticleEditorContent: View {
     let isDocumentOpen: Bool
@@ -61,6 +64,7 @@ public struct ArticleEditorContent: View {
                 blocksSection
             }
             .formStyle(.grouped)
+            .dropsFocusWhenScrolling()
             .navigationTitle(title.wrappedValue.isEmpty ? "Untitled" : title.wrappedValue)
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) {
@@ -491,4 +495,39 @@ private struct BlockRow: View {
         }
     }
 
+}
+
+private extension View {
+    /// Gives up keyboard focus the moment a scroll starts — iOS and iPadOS only.
+    ///
+    /// A focused field is the first responder, and UIKit keeps bringing the first
+    /// responder back into view on later layout passes. So editing one field and then
+    /// scrolling away to read the rest of the article would yank the page back to that
+    /// field once the scroll settled — and keep doing it for as long as that field stayed
+    /// focused, which is forever unless something else happened to take it. Scrolling
+    /// means reading rather than editing, so the scroll is what ends the edit.
+    ///
+    /// `scrollDismissesKeyboard` is the obvious modifier for this and does nothing here:
+    /// it only has a keyboard to dismiss when the *software* keyboard is up, so on an iPad
+    /// with a hardware keyboard — confirmed by typing after a scroll in Simulator and
+    /// watching the text still land in the field left behind — focus simply stayed put.
+    /// Asking the responder chain directly is what works with either keyboard, and it
+    /// covers every field in the form at once: the `UITextView`s behind
+    /// ``PasteAwareTextEditor`` and the plain SwiftUI `TextField`s alike, where a
+    /// `FocusState` would have to enumerate them and still could not reach the
+    /// representable-backed ones.
+    ///
+    /// Not applied on macOS: scrolling with a trackpad while the caret sits in a field is
+    /// ordinary there, an `NSScrollView` never drags itself back to the first responder,
+    /// and dropping focus mid-edit would be the surprising behaviour rather than the fix.
+    func dropsFocusWhenScrolling() -> some View {
+        #if os(macOS)
+        self
+        #else
+        onScrollPhaseChange { _, phase in
+            guard phase == .interacting else { return }
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
+        #endif
+    }
 }

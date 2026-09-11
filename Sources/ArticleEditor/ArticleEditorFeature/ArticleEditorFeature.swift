@@ -49,16 +49,26 @@ public enum ArticleEditorFeature {
 
     @Prisms
     public enum Action: Sendable {
-        /// Dispatched by the view's `onAppear`. Loads `state.opened` — switching articles
-        /// is a *new screen*, not a message to an existing one, so there is no `.open(URL)`
-        /// and no "am I allowed to replace what's here?" gate; the app answers that
-        /// question before this screen is ever built (see `AppNavigation`'s gates).
+        /// Dispatched by navigation, the moment it commits the screen this state belongs
+        /// to. Loads `state.opened` — switching articles is a *new screen*, not a message
+        /// to an existing one, so there is no `.open(URL)` and no "am I allowed to replace
+        /// what's here?" gate; the app answers that question before this screen is ever
+        /// built (see `AppNavigation`'s gates).
+        ///
+        /// Deliberately *not* driven by the view's `onAppear`: a push onto an already-open
+        /// editor replaces the stack element in place, so the view is never torn down and
+        /// `onAppear` never fires a second time.
         case start
         /// Carries the URL that was actually loaded, so a load still in flight for the
         /// article the user just navigated away from cannot land in the screen that
         /// replaced it (the stack element is replaced, the in-flight effect is not).
         case opened(URL, Result<(article: Article, blockIDs: [UUID]), ArticleEditorError>)
         case allSummariesLoaded(Result<[ArticleSummary], ArticleEditorError>)
+        /// Re-reads the article index behind the link picker. Deliberately *not* `.start`:
+        /// the index goes stale whenever any article file is rewritten — including by
+        /// something that is not this screen — and re-running `.start` would throw away
+        /// the open document to fix a list beside it.
+        case refreshSummaries
 
         case setTitle(String)
         case setSlug(String)
@@ -177,7 +187,6 @@ public enum ArticleEditorFeature {
 
     @Prisms
     public enum ViewAction: Sendable {
-        case onAppear
         case setTitle(String)
         case setSlug(String)
         case setAuthor(String)
@@ -237,7 +246,6 @@ public enum ArticleEditorFeature {
     public static let mapAction = Reader<Environment, @Sendable (ViewAction) -> Action> { _ in
         { viewAction in
             switch viewAction {
-            case .onAppear: .start
             case .setTitle(let value): .setTitle(value)
             case .setSlug(let value): .setSlug(value)
             case .setAuthor(let value): .setAuthor(value)
@@ -302,6 +310,9 @@ public enum ArticleEditorFeature {
             case .opened(let url, .failure(let error)):
                 guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { $0.saveError = error.readableDescription }
+
+            case .refreshSummaries:
+                return .produce { ctx in ctx.environment.listArticles().asEffect { Action.allSummariesLoaded($0) } }
 
             case .allSummariesLoaded(.success(let summaries)):
                 return .reduce { $0.allSummaries = summaries }
@@ -401,6 +412,7 @@ public enum ArticleEditorFeature {
                     guard let savedArticle = state.document?.currentArticle else { return }
                     state.document?.lastWrittenHash = hash
                     state.document?.originalSnapshot = savedArticle
+                    state.opened = state.opened.reflecting(savedArticle)
                     // A save re-baselines the document: nothing left to step back to.
                     state.document?.undoStack = []
                     state.document?.redoStack = []
@@ -485,6 +497,7 @@ public enum ArticleEditorFeature {
             case .reloaded(let url, .success(let result)):
                 guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { state in
+                    state.opened = state.opened.reflecting(result.article)
                     state.document = OpenDocument(url: url, article: result.article)
                     state.document?.blocks = zip(result.blockIDs, result.article.blocks).map { EditableBlock(id: $0, block: $1) }
                 }

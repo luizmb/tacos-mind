@@ -59,6 +59,5 @@ public struct ArticleEditorView: View {
             onRun: { dispatch(.run) },
             onOpenChat: { dispatch(.openChat) }
         )
-        .onAppear { dispatch(.onAppear) }
     }
 }

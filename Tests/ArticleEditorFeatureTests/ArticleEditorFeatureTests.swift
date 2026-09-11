@@ -32,7 +32,17 @@ struct ArticleEditorFeatureTests {
         func record(_ url: URL) { urls.append(url) }
     }
 
+    /// A stand-in for the Articles directory, so a test can change what the *next* listing
+    /// answers — which is the whole point of a refresh. Same isolation reasoning as
+    /// ``URLRecorder``.
+    private final class ArticleIndex: @unchecked Sendable {
+        private(set) var summaries: [ArticleSummary]
+        init(_ summaries: [ArticleSummary]) { self.summaries = summaries }
+        func set(_ summaries: [ArticleSummary]) { self.summaries = summaries }
+    }
+
     private func makeStore(
+        initial: ArticleEditorFeature.State? = nil,
         opening: ArticleSummary? = nil,
         openDocument: @escaping @Sendable (URL) -> Publisher<(article: Article, blockIDs: [UUID]), ArticleEditorError> = { url in
             .fail(.fileReadFailed(path: url.path, reason: "unused"))
@@ -41,10 +51,11 @@ struct ArticleEditorFeatureTests {
             .just(URL(fileURLWithPath: "/tmp/dist/articles/\(slug).html"))
         },
         generateAllArticles: @escaping @Sendable () -> Publisher<Void, ArticleEditorError> = { .just(()) },
+        listArticles: @escaping @Sendable () -> Publisher<[ArticleSummary], ArticleEditorError> = { .just([]) },
         openInBrowser: @escaping @MainActor @Sendable (URL) -> Void = { _ in }
     ) -> TestStore<ArticleEditorFeature.Action, ArticleEditorFeature.State, ArticleEditorFeature.Environment> {
         TestStore(
-            initial: ArticleEditorFeature.State(opening: opening ?? summary(slug: "pure-functions")),
+            initial: initial ?? ArticleEditorFeature.State(opening: opening ?? summary(slug: "pure-functions")),
             behavior: ArticleEditorFeature.behavior(),
             environment: ArticleEditorFeature.Environment(
                 openDocument: openDocument,
@@ -52,7 +63,7 @@ struct ArticleEditorFeatureTests {
                 watchFile: { _ in .empty() },
                 checkDiskHash: { _ in .just("hash") },
                 parseDiskArticle: { _ in .fail(.fileReadFailed(path: "", reason: "unused")) },
-                listArticles: { .just([]) },
+                listArticles: listArticles,
                 generateArticle: generateArticle,
                 generateAllArticles: generateAllArticles,
                 openInBrowser: openInBrowser
@@ -181,6 +192,71 @@ struct ArticleEditorFeatureTests {
         await store.runEffects()
 
         #expect(recorder.urls == [previewURL])
+    }
+
+    /// `opened` is what the sidebar highlight matches on, and every field in it except the
+    /// URL is content the form can edit. A save that renames the article has to move it,
+    /// or the refreshed sidebar would show the new slug while the highlight still points
+    /// at the old one.
+    @Test("a save re-describes the screen's own summary from what was written")
+    func aSaveUpdatesTheOpenedSummary() async throws {
+        let target = summary(slug: "pure-functions")
+        // Renamed in the form but not yet written — the state a Save starts from.
+        var editor = ArticleEditorFeature.State(opening: target)
+        var document = OpenDocument(url: target.url, article: article(slug: "pure-functions"))
+        document.title = "Renamed"
+        document.slug = "renamed"
+        editor.document = document
+        let store = makeStore(initial: editor)
+
+        store.dispatch(.save) { $0.isSaving = true }
+        await store.runEffects()
+        store.receive(ArticleEditorFeature.Action.prism.saved) { _, state in
+            state.isSaving = false
+            state.opened = ArticleSummary(url: target.url, slug: "renamed", title: "Renamed", number: 0)
+            state.document?.lastWrittenHash = "hash"
+            if let current = state.document?.currentArticle { state.document?.originalSnapshot = current }
+        }
+        await store.runEffects()
+
+        // The file itself never moves — a save rewrites it, it does not rename it.
+        #expect(store.state.opened.url == target.url)
+        #expect(store.state.opened.slug == "renamed")
+        #expect(store.state.opened.title == "Renamed")
+    }
+
+    /// The link picker's copy of the index goes stale whenever *any* article file is
+    /// rewritten, including by a GitHub pull that this screen had nothing to do with.
+    /// Re-running `.start` would fix the list by throwing away the open document, which
+    /// is why this is its own action.
+    @Test(".refreshSummaries re-reads the index without disturbing the open document")
+    func refreshSummariesLeavesTheDocumentAlone() async throws {
+        let target = summary(slug: "pure-functions")
+        let directory = ArticleIndex([])
+        let loaded = article(slug: "pure-functions")
+        let store = makeStore(
+            opening: target,
+            openDocument: { _ in .just((article: loaded, blockIDs: [UUID()])) },
+            listArticles: { .just(directory.summaries) }
+        )
+
+        store.dispatch(.start) { _ in }
+        await store.runEffects()
+        try await receiveOpened(on: store, expectedURL: target.url)
+        let documentBefore = store.state.document
+
+        // Something else — a pull, say — writes an article this screen knows nothing about.
+        let pulled = [target, summary(slug: "from-github", number: 7)]
+        directory.set(pulled)
+
+        store.dispatch(.refreshSummaries) { _ in }
+        await store.runEffects()
+        store.receive(ArticleEditorFeature.Action.prism.allSummariesLoaded) { _, state in
+            state.allSummaries = pulled
+        }
+
+        #expect(store.state.allSummaries == pulled)
+        #expect(store.state.document == documentBefore)
     }
 
     @Test(".openChat is a pure trigger — no local state change, no effect")
