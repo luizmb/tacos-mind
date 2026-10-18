@@ -27,7 +27,7 @@ enum PreviewServer {
         isStarted = true
 
         let router = Router<Void> { request in
-            Reader { _ in Publisher.future { serveFile(atRequestPath: request.path, from: directory) } }
+            RouteEffect(Reader { (_: Void) in Publisher.future { serveFile(atRequestPath: request.path, from: directory) } })
         }
         Task.detached {
             _ = startServer(port: port, router: router).runReader(())

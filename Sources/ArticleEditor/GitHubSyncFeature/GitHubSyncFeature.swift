@@ -9,7 +9,7 @@ import SwiftRexOperators
 import SwiftRexReactiveConcurrency
 import SwiftUI
 
-@Feature(strategy: .observationSimple)
+@Feature
 public enum GitHubSyncFeature {
     public struct State: Sendable, Equatable {
         /// The screens pushed inside this sheet — see ``GitHubSyncRoute``. Whether the

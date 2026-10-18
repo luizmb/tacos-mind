@@ -11,7 +11,7 @@ import SwiftRexOperators
 import SwiftRexReactiveConcurrency
 import SwiftUI
 
-@Feature(strategy: .observationSimple)
+@Feature
 public enum ArticleEditorFeature {
     public struct State: Sendable, Equatable {
         /// The sidebar entry this screen was pushed for — the identity the editor exists

@@ -21,16 +21,18 @@ import SwiftUI
 /// path to a `NavigationStack`. `NavigationSplitView`'s own automatic compact-width push
 /// was confirmed, by running this in Simulator across two separate fix attempts, to just
 /// never fire, so the compact case stays an explicit stack.
-public struct AppRootView: View, Routable {
-    let viewStore: ViewStore<AppState, AppAction>
-    public let router: AppRouter
+public struct AppRootView: View, @MainActor Routable {
+    @OwnedStore var viewStore: ViewStore<AppAction, AppState>
+    let world: World
+    /// Made from the view store each render: a plain value, cheap, and holding no state.
+    public var router: AppRouter { AppRouter(viewStore: viewStore, world: world) }
     #if !os(macOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
 
-    init(viewStore: ViewStore<AppState, AppAction>, router: AppRouter) {
-        self.viewStore = viewStore
-        self.router = router
+    init(store: any StoreType<AppAction, AppState>, world: World) {
+        _viewStore = OwnedStore(wrappedValue: store.viewStore())
+        self.world = world
     }
 
     public var body: some View {
@@ -55,7 +57,7 @@ public struct AppRootView: View, Routable {
         NavigationSplitView {
             sidebar
         } detail: {
-            router.detail(for: viewStore.state.path.last?.route)
+            router.detail(for: viewStore.state.path.value.last?.route)
                 .modifier(ChatPresentation(viewStore: viewStore, router: router))
         }
         .modifier(SharedPresentations(viewStore: viewStore, router: router))
@@ -64,7 +66,7 @@ public struct AppRootView: View, Routable {
     #if !os(macOS)
     /// iPhone, and iPad in compact width — one explicit stack over the same path.
     private var compactLayout: some View {
-        NavigationStack(path: viewStore.binding(.state(\.routes), dispatch: .action(\.navigation.setPath))) {
+        NavigationStack(path: viewStore.binding(.state(\.routes).action(\.navigation.setPath))) {
             sidebar
                 .navigationDestination(for: AppRoute.self) { route in
                     router.destination(for: route)
@@ -105,7 +107,7 @@ public struct AppRootView: View, Routable {
 /// and then reads `Optional(false) != nil`, i.e. permanently `true`. That single mistake
 /// was what left this app's GitHub Sync sheet stacking undismissable modals.
 private struct SharedPresentations: ViewModifier {
-    let viewStore: ViewStore<AppState, AppAction>
+    let viewStore: ViewStore<AppAction, AppState>
     let router: AppRouter
 
     func body(content: Content) -> some View {
@@ -113,7 +115,10 @@ private struct SharedPresentations: ViewModifier {
             // `.presenting` wires BOTH dismissal edges — the binding's `set(false)` and
             // `onDismiss` — so the presentation walks `presented → dismissing → dismissed`
             // and can never stick half-way.
-            .presenting(viewStore, \.gitHubSync, dismiss: .navigation(.dismissGitHubSync)) { _ in
+            .sheet(
+                isPresented: viewStore.presentation(\.gitHubSync, dismiss: .navigation(.dismissGitHubSync)),
+                onDismiss: { viewStore.dispatch(.navigation(.dismissGitHubSync)) }
+            ) {
                 router.gitHubSync()
             }
             // Only ever up when the app could *not* put the edits on disk itself —
@@ -122,9 +127,9 @@ private struct SharedPresentations: ViewModifier {
             // under the dialog as the state that raised it goes away.
             .confirmationDialog(
                 "Unsaved changes",
-                isPresented: viewStore.presence(.state(\.discardPrompt), dismiss: .navigation(.cancelPending)),
+                isPresented: viewStore.binding(.state(\.discardPrompt).action(review: { (_: Void) in .navigation(.cancelPending) })),
                 titleVisibility: .visible,
-                presenting: viewStore.state.discardPrompt
+                presenting: viewStore.state.discardPrompt.value
             ) { _ in
                 Button("Discard and Open", role: .destructive) {
                     viewStore.dispatch(.navigation(.resumePending))
@@ -144,12 +149,12 @@ private struct SharedPresentations: ViewModifier {
 /// of whichever article is open — it reads and writes that article's Brainstorming field,
 /// and its entry point is a button inside the editor, not a top-level toolbar item.
 private struct ChatPresentation: ViewModifier {
-    let viewStore: ViewStore<AppState, AppAction>
+    let viewStore: ViewStore<AppAction, AppState>
     let router: AppRouter
 
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.inspector(isPresented: viewStore.presence(.state(\.chat), dismiss: .navigation(.dismissChat))) {
+        content.inspector(isPresented: viewStore.presentation(\.chat, dismiss: .navigation(.dismissChat))) {
             // `.inspector` has no `onDismiss`, so `onDisappear` is what drives the second
             // step of the presentation's walk — the same "the animation has finished"
             // signal `.presenting` gets for free on a sheet. If AppKit ever keeps the
@@ -161,7 +166,10 @@ private struct ChatPresentation: ViewModifier {
                 .onDisappear { viewStore.dispatch(.navigation(.dismissChat)) }
         }
         #else
-        content.presenting(viewStore, \.chat, dismiss: .navigation(.dismissChat)) { _ in
+        content.sheet(
+            isPresented: viewStore.presentation(\.chat, dismiss: .navigation(.dismissChat)),
+            onDismiss: { viewStore.dispatch(.navigation(.dismissChat)) }
+        ) {
             router.chat()
         }
         #endif
@@ -176,5 +184,17 @@ public enum AppScene {
         WindowGroup {
             AppFeature.view(store: store, environment: world)
         }
+    }
+}
+
+extension ViewStore where Action == AppAction, State == AppState {
+    /// Whether a `Presentation` slot is up, for SwiftUI: reads the slot's state, and dispatches
+    /// `dismiss` when SwiftUI takes it down — the first step of its walk; `onDismiss` sends the
+    /// second, so it goes `presented → dismissing → dismissed` and never sticks half-way.
+    func presentation<T>(_ slot: KeyPath<AppState, Presentation<T>> & Sendable, dismiss: AppAction) -> Binding<Bool> {
+        Binding(
+            get: { state[dynamicMember: slot].value.isPresented },
+            set: { isUp in if !isUp { dispatch(dismiss) } }
+        )
     }
 }
