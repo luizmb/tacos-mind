@@ -161,13 +161,13 @@ func navigationBehavior() -> Behavior<AppAction, AppState, World> {
             return .reduce { $0.chat = .presented(AIChatFeature.State(brainstorming: brainstorming)) }
 
         case .dismissChat:
-            return .reduce { $0.chat = $0.chat.dismiss() }
+            return .reduce { $0.chat = $0.chat.nextDismissalStep() }
 
         case .presentGitHubSync:
             return .reduce { $0.gitHubSync = .presented(GitHubSyncFeature.initialState(with: ())) }
 
         case .dismissGitHubSync:
-            return .reduce { $0.gitHubSync = $0.gitHubSync.dismiss() }
+            return .reduce { $0.gitHubSync = $0.gitHubSync.nextDismissalStep() }
         }
     }
 }
@@ -325,5 +325,16 @@ private extension AppState {
     var hasConflictedEdits: Bool {
         guard hasUnsavedEdits, case .conflict = openEditor?.document?.externalChange else { return false }
         return true
+    }
+}
+
+extension Presentation {
+    /// One step of a dismissal per edge SwiftUI reports: `presented → dismissing` when it starts
+    /// going, `dismissing → dismissed` when it has gone. The app sends the same action for both.
+    func nextDismissalStep() -> Presentation {
+        switch self {
+        case .presented: dismiss()
+        case .dismissing, .dismissed: .dismissed
+        }
     }
 }

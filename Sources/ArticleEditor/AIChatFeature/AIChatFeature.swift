@@ -9,7 +9,7 @@ import SwiftRexOperators
 import SwiftRexReactiveConcurrency
 import SwiftUI
 
-@Feature(strategy: .observationSimple)
+@Feature
 public enum AIChatFeature {
     /// Which side of the conversation currently owns the shared chat field — the same
     /// text view alternates between "you're writing" and "you're reading/hearing the

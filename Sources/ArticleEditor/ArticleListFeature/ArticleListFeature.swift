@@ -8,7 +8,7 @@ import SwiftRexOperators
 import SwiftRexReactiveConcurrency
 import SwiftUI
 
-@Feature(strategy: .observationSimple)
+@Feature
 public enum ArticleListFeature {
     public struct State: Sendable, Equatable {
         public var summaries: [ArticleSummary]

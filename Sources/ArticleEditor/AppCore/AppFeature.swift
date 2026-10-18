@@ -30,7 +30,7 @@ import SwiftUI
 /// It is also the app's coordinator: it holds the `World`, constructs the ``AppRouter``,
 /// and injects it into the root view. Child screens are created by that router on demand
 /// and never cached.
-@Feature(strategy: .observationSimple)
+@Feature
 public enum AppFeature {
 
     // MARK: - State
@@ -90,7 +90,7 @@ public enum AppFeature {
     public typealias Environment = World
 
     // No `ViewState`/`ViewAction`: the macro aliases them to `State`/`Action`, so the
-    // root view's store is `ViewStore<AppState, AppAction>` — the whole app, which is
+    // root view's store is `ViewStore<AppAction, AppState>` — the whole app, which is
     // what a router needs in order to project children out of it.
 
     public static func initialState(with _: Void) -> State { .init() }
@@ -104,10 +104,7 @@ public enum AppFeature {
 
     @MainActor
     public static func view(store: any StoreType<Action, State>, environment: World) -> some View {
-        AppRootView(
-            viewStore: ViewStore(store),
-            router: AppRouter(store: store, world: environment)
-        )
+        AppRootView(store: store, world: environment)
     }
 
     // MARK: - Behavior

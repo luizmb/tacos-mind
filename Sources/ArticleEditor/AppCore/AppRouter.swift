@@ -22,23 +22,21 @@ import SwiftUI
 /// and narrowing `World` on the spot — a screen that isn't on screen has no store, no
 /// view and no environment.
 ///
-/// Note that every method takes what it needs as a **parameter** rather than reading it
-/// off the store. The router holds the raw store, which SwiftUI does not observe; a read
-/// in here would register no dependency and the screen would go stale. The root view does
-/// all the reading, off its own `ViewStore`.
+/// It holds the root's `ViewStore`, so a screen that lives in an optional slot is built from
+/// the slot's presence as the root reads it, and each child keeps a view store of its own.
 @MainActor
 public struct AppRouter {
-    private let store: MainStoreType
+    private let viewStore: ViewStore<AppAction, AppState>
     private let world: World
 
-    init(store: MainStoreType, world: World) {
-        self.store = store
+    init(viewStore: ViewStore<AppAction, AppState>, world: World) {
+        self.viewStore = viewStore
         self.world = world
     }
 
     /// The sidebar — always on screen, so a total lift rather than an affine one.
     public func sidebar() -> some View {
-        AppScopes.articleList.view(of: ArticleListFeature.self, from: store, world: world)
+        AppScopes.articleList.view(of: ArticleListFeature.self, from: viewStore, world: world)
     }
 
     /// The screen for `route`. `@ViewBuilder` keeps the concrete per-route types without
@@ -47,7 +45,7 @@ public struct AppRouter {
     public func destination(for route: AppRoute) -> some View {
         switch route {
         case .articleEditor:
-            AppScopes.articleEditor.screen(of: ArticleEditorFeature.self, from: store, world: world)
+            if let editor = AppScopes.articleEditor.view(of: ArticleEditorFeature.self, from: viewStore, world: world) { editor }
         }
     }
 
@@ -69,44 +67,11 @@ public struct AppRouter {
 
     @ViewBuilder
     public func chat() -> some View {
-        AppScopes.chat.screen(of: AIChatFeature.self, from: store, world: world)
+        if let chat = AppScopes.chat.view(of: AIChatFeature.self, from: viewStore, world: world) { chat }
     }
 
     @ViewBuilder
     public func gitHubSync() -> some View {
-        AppScopes.gitHubSync.screen(of: GitHubSyncFeature.self, from: store, world: world)
-    }
-}
-
-// MARK: - Building a view from an affine scope
-
-/// The affine counterpart of `Relay.Scope.view(of:from:world:)`, which needs a *total*
-/// state lane and so cannot build a screen that lives in a stack element or a
-/// presentation slot.
-///
-/// That the library's total builder does not compile for these scopes is the useful part:
-/// it is a type error, not a convention, that a screen which may not exist has to be
-/// built through something that can say so.
-///
-/// `transpose()` holds the last value steady while SwiftUI animates the screen away, so
-/// it never blanks on its way out; the outer `nil` then tears it down once the state is
-/// actually gone.
-extension Relay.Scope where
-    ActionStrategy: Relay.ActionAxis.EmbedsProtocol,
-    StateStrategy: Relay.StateAxis.WritesProtocol,
-    EnvironmentStrategy: Relay.EnvironmentAxis.NarrowsProtocol,
-    ActionStrategy.Global == Action,
-    StateStrategy.Global == State,
-    EnvironmentStrategy.Global == Environment {
-    @MainActor @ViewBuilder
-    func screen<F: ViewFactory>(
-        of _: F.Type,
-        from store: any StoreType<Action, State>,
-        world: Environment
-    ) -> some View
-    where F.Action == ActionStrategy.Local, F.State == StateStrategy.Local, F.Environment == EnvironmentStrategy.Local {
-        if let focused = store.projection(action: action.review, state: state.preview).transpose() {
-            F.view(store: focused, environment: environment.narrow(world))
-        }
+        if let sync = AppScopes.gitHubSync.view(of: GitHubSyncFeature.self, from: viewStore, world: world) { sync }
     }
 }

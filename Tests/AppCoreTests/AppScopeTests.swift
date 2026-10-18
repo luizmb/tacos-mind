@@ -80,17 +80,17 @@ struct AppScopeTests {
     /// dispatches correctly, reduces correctly, and never re-renders. Nothing pushed,
     /// ever, and no test caught it because the state was always right.
     ///
-    /// `AppFeature.view` builds a `ViewStore`, which is `@Observable`. This asserts the
+    /// `AppFeature.view` makes a `ViewStore`, which observes. This asserts the
     /// property that actually matters: reading `routes` registers a dependency that a
     /// push fires.
     @Test("the root path is observable, so a push actually re-renders the stack")
     func theRootPathIsObservableSoAPushRerendersTheStack() async {
         let store = MainStore.app(world: AppCore.World.mock())
-        let viewStore = ViewStore(store)
+        let viewStore = store.viewStore(.observation)
 
         let observed = Observed()
         withObservationTracking {
-            _ = viewStore.state.routes
+            _ = viewStore.state.routes.value
         } onChange: {
             observed.fire()
         }
@@ -100,7 +100,7 @@ struct AppScopeTests {
         store.dispatch(.navigation(.push(.articleEditor(summary("pure-functions")))))
 
         #expect(observed.didFire)
-        #expect(viewStore.state.routes == [.articleEditor])
+        #expect(viewStore.state.routes.value == [.articleEditor])
     }
 
     /// Exercised serially from a single `@MainActor` test, so the lack of real
