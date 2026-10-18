@@ -1,6 +1,19 @@
 // swift-tools-version: 6.3
 import PackageDescription
 
+// Vitral's SwiftUI components exist only on Apple platforms; elsewhere (the Linux build of Meow)
+// the package is left out altogether, so its missing product isn't looked for.
+#if canImport(Darwin)
+let vitralPackage: [Package.Dependency] = [.package(url: "https://github.com/luizmb/Vitral.git", from: "0.2.5")]
+let vitral: [Target.Dependency] = [
+    .product(name: "Vitral", package: "Vitral"),
+    .product(name: "VitralTokens", package: "Vitral"),
+]
+#else
+let vitralPackage: [Package.Dependency] = []
+let vitral: [Target.Dependency] = []
+#endif
+
 let package = Package(
     name: "TacosMind",
     platforms: [.macOS(.v26), .iOS(.v26)],
@@ -14,8 +27,7 @@ let package = Package(
         .package(url: "https://github.com/SwiftRex/SwiftRex.git", branch: "main", traits: ["ReactiveConcurrency"]),
         .package(url: "https://github.com/luizmb/ReactiveConcurrency.git", from: "2.0.0"),
         .package(url: "https://github.com/luizmb/NetworkTools.git", from: "0.9.0"),
-        .package(url: "https://github.com/luizmb/Vitral.git", from: "0.2.5"),
-    ],
+    ] + vitralPackage,
     targets: [
         .target(
             name: "GeneratorCore",
@@ -78,8 +90,7 @@ let package = Package(
         .target(
             name: "ArticleListFeature",
             dependencies: [
-                .product(name: "Vitral", package: "Vitral"),
-                .product(name: "VitralTokens", package: "Vitral"),
+            ] + vitral + [
                 "AppDomain",
                 "GeneratorCore",
                 .product(name: "SwiftRex", package: "SwiftRex"),
@@ -98,8 +109,7 @@ let package = Package(
         .target(
             name: "ArticleEditorFeature",
             dependencies: [
-                .product(name: "Vitral", package: "Vitral"),
-                .product(name: "VitralTokens", package: "Vitral"),
+            ] + vitral + [
                 "AppDomain",
                 "FileWatching",
                 "GeneratorCore",
@@ -119,8 +129,7 @@ let package = Package(
         .target(
             name: "AIChatFeature",
             dependencies: [
-                .product(name: "Vitral", package: "Vitral"),
-                .product(name: "VitralTokens", package: "Vitral"),
+            ] + vitral + [
                 "AppDomain",
                 .product(name: "SwiftRex", package: "SwiftRex"),
                 .product(name: "SwiftRex.SwiftUI", package: "SwiftRex"),
@@ -138,8 +147,7 @@ let package = Package(
         .target(
             name: "GitHubSyncFeature",
             dependencies: [
-                .product(name: "Vitral", package: "Vitral"),
-                .product(name: "VitralTokens", package: "Vitral"),
+            ] + vitral + [
                 "AppDomain",
                 .product(name: "SwiftRex", package: "SwiftRex"),
                 .product(name: "SwiftRex.SwiftUI", package: "SwiftRex"),
@@ -159,8 +167,7 @@ let package = Package(
         .target(
             name: "AppCore",
             dependencies: [
-                .product(name: "Vitral", package: "Vitral"),
-                .product(name: "VitralTokens", package: "Vitral"),
+            ] + vitral + [
                 "AppDomain",
                 "FileWatching",
                 "ArticleListFeature",
