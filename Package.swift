@@ -14,6 +14,7 @@ let package = Package(
         .package(url: "https://github.com/SwiftRex/SwiftRex.git", branch: "main", traits: ["ReactiveConcurrency"]),
         .package(url: "https://github.com/luizmb/ReactiveConcurrency.git", from: "2.0.0"),
         .package(url: "https://github.com/luizmb/NetworkTools.git", from: "0.9.0"),
+        .package(url: "https://github.com/luizmb/Vitral.git", from: "0.2.5"),
     ],
     targets: [
         .target(
@@ -77,6 +78,8 @@ let package = Package(
         .target(
             name: "ArticleListFeature",
             dependencies: [
+                .product(name: "Vitral", package: "Vitral"),
+                .product(name: "VitralTokens", package: "Vitral"),
                 "AppDomain",
                 "GeneratorCore",
                 .product(name: "SwiftRex", package: "SwiftRex"),
@@ -95,6 +98,8 @@ let package = Package(
         .target(
             name: "ArticleEditorFeature",
             dependencies: [
+                .product(name: "Vitral", package: "Vitral"),
+                .product(name: "VitralTokens", package: "Vitral"),
                 "AppDomain",
                 "FileWatching",
                 "GeneratorCore",
@@ -114,6 +119,8 @@ let package = Package(
         .target(
             name: "AIChatFeature",
             dependencies: [
+                .product(name: "Vitral", package: "Vitral"),
+                .product(name: "VitralTokens", package: "Vitral"),
                 "AppDomain",
                 .product(name: "SwiftRex", package: "SwiftRex"),
                 .product(name: "SwiftRex.SwiftUI", package: "SwiftRex"),
@@ -131,6 +138,8 @@ let package = Package(
         .target(
             name: "GitHubSyncFeature",
             dependencies: [
+                .product(name: "Vitral", package: "Vitral"),
+                .product(name: "VitralTokens", package: "Vitral"),
                 "AppDomain",
                 .product(name: "SwiftRex", package: "SwiftRex"),
                 .product(name: "SwiftRex.SwiftUI", package: "SwiftRex"),
@@ -150,6 +159,8 @@ let package = Package(
         .target(
             name: "AppCore",
             dependencies: [
+                .product(name: "Vitral", package: "Vitral"),
+                .product(name: "VitralTokens", package: "Vitral"),
                 "AppDomain",
                 "FileWatching",
                 "ArticleListFeature",

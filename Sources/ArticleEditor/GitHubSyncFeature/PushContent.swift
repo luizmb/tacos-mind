@@ -1,4 +1,6 @@
 import SwiftUI
+import Vitral
+import VitralTokens
 
 /// Names the branch, commit and pull request a push will create. Every field arrives
 /// pre-filled from the push preview, so confirming without touching anything is a valid
@@ -17,7 +19,7 @@ public struct PushContent: View {
     /// A pushed screen, so no `NavigationStack` of its own — it is rendered inside
     /// `GitHubSyncContent`'s stack, which supplies the bar this toolbar attaches to.
     public var body: some View {
-        Form {
+        GlassList(backdrop: .grid(), rows: .padded) {
             Section {
                 TextField("Branch", text: branchInput)
                     #if os(iOS)

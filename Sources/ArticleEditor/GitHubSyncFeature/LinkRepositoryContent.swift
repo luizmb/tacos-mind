@@ -1,4 +1,6 @@
 import SwiftUI
+import Vitral
+import VitralTokens
 
 /// The one-time repo/branch/token setup screen — everything here except the base branch
 /// becomes unchangeable once linked (see `EditBranchContent`); changing repo or token means
@@ -17,7 +19,7 @@ public struct LinkRepositoryContent: View {
     /// A pushed screen, so no `NavigationStack` of its own — it is rendered inside
     /// `GitHubSyncContent`'s stack, which supplies the bar this toolbar attaches to.
     public var body: some View {
-        Form {
+        GlassList(backdrop: .grid(), rows: .padded) {
             Section("Repository") {
                 TextField("owner/repo", text: repoInput)
                     #if os(iOS)
@@ -61,7 +63,7 @@ public struct LinkRepositoryContent: View {
             if let error {
                 Section {
                     Text(error)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(.danger)
                 }
             }
         }

@@ -6,6 +6,8 @@ import GitHubSyncFeature
 import SwiftRex
 import SwiftRexArchitecture
 import SwiftUI
+import Vitral
+import VitralTokens
 
 /// Turns a route into a screen — **the boundary the `World` stops at**.
 ///
@@ -57,11 +59,13 @@ public struct AppRouter {
         if let route {
             destination(for: route)
         } else {
-            ContentUnavailableView(
+            EmptyState(
                 "No Article Open",
-                systemImage: "doc.text",
-                description: Text("Choose an article from the sidebar.")
+                message: Text("Choose an article from the sidebar."),
+                icon: Image(systemName: "doc.text")
             )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background { Backdrop(.grid()) }
         }
     }
 

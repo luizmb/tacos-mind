@@ -1,5 +1,7 @@
 import AppDomain
 import SwiftUI
+import Vitral
+import VitralTokens
 
 public struct AIChatContent: View {
     let isAvailable: Bool
@@ -22,26 +24,24 @@ public struct AIChatContent: View {
     public var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
+            Hairline()
             if !isAvailable {
-                ContentUnavailableView(
+                EmptyState(
                     "Assistant Unavailable",
-                    systemImage: "apple.intelligence",
-                    description: Text("The on-device assistant isn't available on this device.")
+                    message: Text("The on-device assistant isn't available on this device."),
+                    icon: Image(systemName: "apple.intelligence")
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 turnsList
-                Divider()
                 composer
             }
             if let lastError {
-                Text(lastError)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .padding(8)
-                    .frame(maxWidth: .infinity)
+                Banner(Text(verbatim: lastError), style: .error)
+                    .padding(Space.small)
             }
         }
+        .background { Backdrop(.grid()) }
         .confirmationDialog(
             "Save this conversation to Brainstorming before closing?",
             isPresented: isConfirmingClose,
@@ -58,7 +58,8 @@ public struct AIChatContent: View {
     private var header: some View {
         HStack {
             Text("Assistant")
-                .font(.headline)
+                .font(.bodyStrong)
+                .foregroundStyle(.ink)
             Spacer()
             // Dispatches `.close` rather than SwiftUI's `dismiss()`. `dismiss()` hides
             // the container directly, behind the store's back, so the "save this
@@ -90,29 +91,14 @@ public struct AIChatContent: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField("Say something…", text: draftText, axis: .vertical)
-                .disabled(!isFieldEditable)
-                .lineLimit(1...4)
-                .textFieldStyle(.plain)
-                .padding(8)
-                .background(Color.secondary.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-            Button(action: onToggleListening) {
+        Composer("Say something…", text: draftText, isEditable: isFieldEditable, isBusy: isResponding) {
+            Pill(isActive: isListening, action: isFieldEditable ? onToggleListening : nil) {
                 Image(systemName: isListening ? "mic.fill" : "mic")
-                    .foregroundStyle(isListening ? Color.red : Color.accentColor)
+                    .frame(width: Size.controlSmall, height: Size.controlSmall)
             }
-            .buttonStyle(.plain)
-            .disabled(!isFieldEditable)
-            Button(action: onSend) {
-                if isResponding {
-                    ProgressView()
-                } else {
-                    Image(systemName: "arrow.up.circle.fill")
-                }
-            }
-            .buttonStyle(.plain)
-            .disabled(isResponding || !isFieldEditable || draftText.wrappedValue.isEmpty)
+            .accessibilityLabel(Text(isListening ? "Stop listening" : "Dictate"))
+        } send: {
+            onSend()
         }
         .padding()
     }
@@ -121,19 +107,11 @@ public struct AIChatContent: View {
 private struct TurnRow: View {
     let turn: ChatTurn
 
-    private var alignment: HorizontalAlignment { turn.role == .user ? .trailing : .leading }
-    private var frameAlignment: Alignment { turn.role == .user ? .trailing : .leading }
-
     var body: some View {
-        VStack(alignment: alignment, spacing: 2) {
-            Text(turn.role == .user ? "You" : "Assistant")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(turn.text)
-                .padding(8)
-                .background(turn.role == .user ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-        .frame(maxWidth: .infinity, alignment: frameAlignment)
+        MessageBubble(
+            Text(verbatim: turn.text),
+            author: Text(turn.role == .user ? "You" : "Assistant"),
+            side: turn.role == .user ? .mine : .theirs
+        )
     }
 }

@@ -1,5 +1,7 @@
 import AppDomain
 import SwiftUI
+import Vitral
+import VitralTokens
 
 public struct ArticleListContent: View {
     let items: [ArticleSummary]
@@ -17,13 +19,15 @@ public struct ArticleListContent: View {
         // the sidebar decides. It is derived from the navigation stack, so it clears when
         // the editor is popped — a `List` that also cleared it locally would be a second
         // writer racing the first.
-        List(items, selection: Binding(
+        GlassList(selection: Binding(
             get: { selectedSlug },
             set: { slug in
                 guard let slug, let match = items.first(where: { $0.slug == slug }) else { return }
                 onSelect(match)
             }
-        )) { summary in
+        ), backdrop: .grid()) {
+            GlassSection(rows: .padded) {
+            ForEach(items) { summary in
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text("#\(summary.number)")
@@ -34,10 +38,12 @@ public struct ArticleListContent: View {
                 }
                 Text(summary.slug)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.inkMuted)
                     .padding(.leading, 42)
             }
             .tag(summary.slug)
+            }
+            }
         }
         .searchable(text: searchText, prompt: "Search articles")
         .navigationTitle("Articles")
@@ -60,12 +66,8 @@ public struct ArticleListContent: View {
         // that can actually show it.
         .safeAreaInset(edge: .bottom) {
             if let createError {
-                Text(createError)
-                    .foregroundStyle(.red)
-                    .font(.footnote)
-                    .padding(8)
-                    .frame(maxWidth: .infinity)
-                    .background(.thinMaterial)
+                Banner(Text(verbatim: createError), style: .error)
+                    .padding(Space.small)
             }
         }
     }

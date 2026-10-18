@@ -2,6 +2,8 @@ import AppDomain
 import Foundation
 import GeneratorCore
 import SwiftUI
+import Vitral
+import VitralTokens
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -15,8 +17,8 @@ public struct ArticleEditorContent: View {
     let draft: Binding<Bool>
     let number: Binding<Int>
     let published: Binding<PublicationDate?>
-    let tags: [Tag]
-    let allTags: [Tag]
+    let tags: [GeneratorCore.Tag]
+    let allTags: [GeneratorCore.Tag]
     let brainstorming: Binding<String>
     let blocks: [EditableBlock]
     let allBlockKinds: [ContentBlockKind]
@@ -30,7 +32,7 @@ public struct ArticleEditorContent: View {
     let conflict: ExternalChangeState
     let isBuilding: Bool
     let buildStatus: String?
-    let onToggleTag: (Tag) -> Void
+    let onToggleTag: (GeneratorCore.Tag) -> Void
     let onAddBlock: (ContentBlockKind, Int) -> Void
     let onRemoveBlock: (UUID) -> Void
     let onMoveBlocks: (IndexSet, Int) -> Void
@@ -54,7 +56,7 @@ public struct ArticleEditorContent: View {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            Form {
+            GlassList(backdrop: .grid(), rows: .padded) {
                 if case .conflict = conflict {
                     conflictBanner
                 }
@@ -63,18 +65,13 @@ public struct ArticleEditorContent: View {
                 tagsSection
                 blocksSection
             }
-            .formStyle(.grouped)
             .dropsFocusWhenScrolling()
             .navigationTitle(title.wrappedValue.isEmpty ? "Untitled" : title.wrappedValue)
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) {
                 if let saveError {
-                    Text(saveError)
-                        .foregroundStyle(.red)
-                        .font(.footnote)
-                        .padding(8)
-                        .frame(maxWidth: .infinity)
-                        .background(.thinMaterial)
+                    Banner(Text(verbatim: saveError), style: .error)
+                        .padding(Space.small)
                 }
             }
             .confirmationDialog(
@@ -155,14 +152,13 @@ public struct ArticleEditorContent: View {
 
     private var conflictBanner: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Label("This file changed on disk while you were editing it.", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                HStack {
-                    Button("Keep Mine", role: .destructive, action: onKeepMine)
-                    Button("Reload Theirs", action: onReloadTheirs)
+            Banner("This file changed on disk while you were editing it.", style: .warning)
+                .trailing {
+                    HStack(spacing: Space.small) {
+                        ButtonSecondary("Keep Mine", size: .small, action: onKeepMine)
+                        ButtonPrimary("Reload Theirs", size: .small, action: onReloadTheirs)
+                    }
                 }
-            }
         }
     }
 
@@ -221,9 +217,10 @@ public struct ArticleEditorContent: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(sortedTags, id: \.self) { tag in
-                        TagToggleChip(tag: tag, isSelected: tags.contains(tag)) {
-                            onToggleTag(tag)
-                        }
+                        TagToggle(
+                            LocalizedStringKey("#\(tag.rawValue)"),
+                            isOn: Binding(get: { tags.contains(tag) }, set: { _ in onToggleTag(tag) })
+                        )
                     }
                 }
                 .padding(.vertical, 4)
@@ -231,7 +228,7 @@ public struct ArticleEditorContent: View {
         }
     }
 
-    private var sortedTags: [Tag] {
+    private var sortedTags: [GeneratorCore.Tag] {
         allTags.sorted { $0.rawValue < $1.rawValue }
     }
 
@@ -320,26 +317,6 @@ private extension PublicationDate {
     init(date: Date) {
         let components = publicationDateCalendar.dateComponents([.year, .month, .day], from: date)
         self.init(year: components.year ?? 1970, month: components.month ?? 1, day: components.day ?? 1)
-    }
-}
-
-private struct TagToggleChip: View {
-    let tag: Tag
-    let isSelected: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        Button(action: onToggle) {
-            Text("#\(tag.rawValue)")
-                .font(.callout)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.accentColor : Color.secondary.opacity(0.15))
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
     }
 }
 

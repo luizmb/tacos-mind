@@ -1,5 +1,7 @@
 import AppDomain
 import SwiftUI
+import Vitral
+import VitralTokens
 
 public struct GitHubSyncContent: View {
     let path: Binding<[GitHubSyncRoute]>
@@ -37,13 +39,13 @@ public struct GitHubSyncContent: View {
     /// left is two confirmation dialogs on one view, which is ordinary.
     public var body: some View {
         NavigationStack(path: path) {
-            Form {
+            GlassList(backdrop: .grid(), rows: .padded) {
                 repositorySection
                 actionsSection
                 if let lastError {
                     Section {
                         Text(lastError)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(.danger)
                     }
                 }
             }

@@ -1,4 +1,6 @@
 import SwiftUI
+import Vitral
+import VitralTokens
 
 /// The only mutation allowed on an already-linked repo — see `LinkRepositoryContent`'s
 /// doc comment for why `repoURL`/token aren't editable here.
@@ -11,7 +13,7 @@ public struct EditBranchContent: View {
     /// A pushed screen, so no `NavigationStack` of its own — it is rendered inside
     /// `GitHubSyncContent`'s stack, which supplies the bar this toolbar attaches to.
     public var body: some View {
-        Form {
+        GlassList(backdrop: .grid(), rows: .padded) {
             Section {
                 TextField("Base branch", text: branchInput)
                     #if os(iOS)
