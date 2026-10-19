@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import SwiftUI
 import Vitral
@@ -11,7 +12,7 @@ public struct AIChatContent: View {
     let draftText: Binding<String>
     let isFieldEditable: Bool
     let turns: [ChatTurn]
-    let lastError: String?
+    let lastError: LocalizedStringResource?
     let isConfirmingClose: Binding<Bool>
     let onSend: () -> Void
     let onToggleListening: () -> Void
@@ -27,8 +28,8 @@ public struct AIChatContent: View {
             Hairline()
             if !isAvailable {
                 EmptyState(
-                    "Assistant Unavailable",
-                    message: Text("The on-device assistant isn't available on this device."),
+                    L.Chat.assistantUnavailable,
+                    message: Text(L.Chat.theOnDeviceAssistantIsnt),
                     icon: Image(systemName: "apple.intelligence")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,27 +38,27 @@ public struct AIChatContent: View {
                 composer
             }
             if let lastError {
-                Banner(Text(verbatim: lastError), style: .error)
+                Banner(Text(lastError), style: .error)
                     .padding(Space.small)
             }
         }
         .background { Backdrop(.grid()) }
         .confirmationDialog(
-            "Save this conversation to Brainstorming before closing?",
+            L.Chat.saveThisConversationToBrainstorming,
             isPresented: isConfirmingClose,
             titleVisibility: .visible
         ) {
-            Button("Save to Notes and Close", action: onConfirmCloseAndSave)
-            Button("Discard and Close", role: .destructive, action: onConfirmCloseAndDiscard)
-            Button("Cancel", role: .cancel) {}
+            Button(L.Chat.saveToNotesAndClose, action: onConfirmCloseAndSave)
+            Button(L.Chat.discardAndClose, role: .destructive, action: onConfirmCloseAndDiscard)
+            Button(L.Common.cancel, role: .cancel) {}
         } message: {
-            Text("Closing ends this conversation — save it to Brainstorming first if you want to keep it.")
+            Text(L.Chat.closingEndsThisConversationSave)
         }
     }
 
     private var header: some View {
         HStack {
-            Text("Assistant")
+            Text(L.Chat.assistant)
                 .font(.bodyStrong)
                 .foregroundStyle(.ink)
             Spacer()
@@ -65,14 +66,14 @@ public struct AIChatContent: View {
             // the container directly, behind the store's back, so the "save this
             // conversation?" gate below never got its chance — the panel just vanished
             // with the conversation in it.
-            Button("Done", action: onClose)
+            Button(L.Common.done, action: onClose)
             Button(action: onToggleMute) {
                 Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
             }
             .buttonStyle(.plain)
-            .help(isMuted ? "Unmute replies" : "Mute replies")
+            .help(isMuted ? L.Chat.unmuteReplies : L.Chat.muteReplies)
             Button(action: onSaveToNotes) {
-                Label("Save to Notes", systemImage: "note.text.badge.plus")
+                Label(L.Chat.saveToNotes, systemImage: "note.text.badge.plus")
             }
             .disabled(turns.isEmpty)
         }
@@ -91,12 +92,12 @@ public struct AIChatContent: View {
     }
 
     private var composer: some View {
-        Composer("Say something…", text: draftText, isEditable: isFieldEditable, isBusy: isResponding) {
+        Composer(L.Chat.saySomething, text: draftText, isEditable: isFieldEditable, isBusy: isResponding) {
             Pill(isActive: isListening, action: isFieldEditable ? onToggleListening : nil) {
                 Image(systemName: isListening ? "mic.fill" : "mic")
                     .frame(width: Size.controlSmall, height: Size.controlSmall)
             }
-            .accessibilityLabel(Text(isListening ? "Stop listening" : "Dictate"))
+            .accessibilityLabel(Text(isListening ? L.Chat.stopListening : L.Chat.dictate))
         } send: {
             onSend()
         }
@@ -110,7 +111,7 @@ private struct TurnRow: View {
     var body: some View {
         MessageBubble(
             Text(verbatim: turn.text),
-            author: Text(turn.role == .user ? "You" : "Assistant"),
+            author: Text(turn.role == .user ? L.Chat.you : L.Chat.assistant),
             side: turn.role == .user ? .mine : .theirs
         )
     }

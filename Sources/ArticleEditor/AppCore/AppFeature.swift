@@ -1,3 +1,4 @@
+import Localization
 import AIChatFeature
 import AppDomain
 import ArticleEditorFeature
@@ -211,20 +212,14 @@ public extension AppState {
         /// doesn't overrule someone.
         case fileChangedOnDisk
         /// The save was attempted and the disk said no.
-        case saveFailed(String)
+        case saveFailed(LocalizedStringResource)
 
         /// What the dialog tells the user. It has to carry the whole explanation: the
         /// title is fixed, because SwiftUI evaluates it outside the `presenting:` closure.
-        var message: String {
+        var message: [LocalizedStringResource] {
             switch self {
-            case .fileChangedOnDisk:
-                """
-                This article also changed on disk, so your edits can't be saved for you \
-                without overwriting that. Opening another article now discards them — \
-                resolve the conflict first if you want to keep them.
-                """
-            case .saveFailed(let reason):
-                "Your edits couldn't be saved: \(reason). Opening another article now discards them."
+            case .fileChangedOnDisk: [L.Resource.App.alsoChangedOnDisk]
+            case .saveFailed(let reason): [L.Resource.App.editsCouldNotBeSaved, reason, L.Resource.App.openingAnotherDiscards]
             }
         }
     }

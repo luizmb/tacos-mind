@@ -1,3 +1,4 @@
+import Localization
 import SwiftUI
 import Vitral
 import VitralTokens
@@ -15,28 +16,28 @@ public struct EditBranchContent: View {
     public var body: some View {
         GlassList(backdrop: .grid(), rows: .padded) {
             Section {
-                TextField("Base branch", text: branchInput)
+                TextField(L.Sync.baseBranch, text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
                     .autocorrectionDisabled()
             } header: {
-                Text("Base Branch")
+                Text(L.Sync.baseBranch2)
             } footer: {
-                Text("Pull reads from this branch, and pushes open a pull request into it.")
+                Text(L.Sync.pullReadsFromThisBranch)
             }
         }
-        .navigationTitle("Edit Base Branch")
+        .navigationTitle(L.Sync.editBaseBranch)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: onCancel)
+                Button(L.Common.cancel, action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(action: onConfirm) {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Text("Save")
+                        Text(L.Common.save)
                     }
                 }
                 .disabled(isSaving)

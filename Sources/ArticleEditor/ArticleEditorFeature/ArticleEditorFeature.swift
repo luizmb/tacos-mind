@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import FileWatching
 import CoreFP
@@ -22,12 +23,12 @@ public enum ArticleEditorFeature {
         public var document: OpenDocument?
         public var allSummaries: [ArticleSummary]
         public var isSaving: Bool
-        public var saveError: String?
+        public var saveError: LocalizedStringResource?
         /// `true` while Cmd+B's full-site regenerate is running.
         public var isBuilding: Bool
         /// The last Build outcome, shown via the toolbar button's `.help(...)` — success
         /// or failure text, `nil` before the first Build.
-        public var buildStatus: String?
+        public var buildStatus: LocalizedStringResource?
         /// `true` while the "revert all unsaved changes?" confirmation is up — store
         /// state, not local SwiftUI `@State`, same convention as every other prompt here.
         public var isConfirmingRevert: Bool
@@ -178,11 +179,11 @@ public enum ArticleEditorFeature {
         public var canUndo: Bool
         public var canRedo: Bool
         public var isSaving: Bool
-        public var saveError: String?
+        public var saveError: LocalizedStringResource?
         public var conflict: ExternalChangeState
         public var allSummaries: [ArticleSummary]
         public var isBuilding: Bool
-        public var buildStatus: String?
+        public var buildStatus: LocalizedStringResource?
     }
 
     @Prisms
@@ -519,7 +520,7 @@ public enum ArticleEditorFeature {
                     .produce { ctx in ctx.environment.generateAllArticles().asEffect { Action.built($0) } }
 
             case .built(.success):
-                return .reduce { $0.isBuilding = false; $0.buildStatus = "Build succeeded" }
+                return .reduce { $0.isBuilding = false; $0.buildStatus = L.Resource.Editor.buildSucceeded }
 
             case .built(.failure(let error)):
                 return .reduce { $0.isBuilding = false; $0.buildStatus = error.readableDescription }
@@ -634,11 +635,11 @@ public enum ArticleEditorFeature {
 }
 
 extension ArticleEditorError {
-    var readableDescription: String {
+    var readableDescription: LocalizedStringResource {
         switch self {
-        case .fileReadFailed(let path, let reason): "Couldn't read \(path): \(reason)"
-        case .fileWriteFailed(let path, let reason): "Couldn't write \(path): \(reason)"
-        case .parseFailed(let path, let reason): "Couldn't parse \(path): \(reason)"
+        case .fileReadFailed(let path, let reason): L.Resource.Common.couldNotRead(path, reason)
+        case .fileWriteFailed(let path, let reason): L.Resource.Common.couldNotWrite(path, reason)
+        case .parseFailed(let path, let reason): L.Resource.Common.couldNotParse(path, reason)
         }
     }
 }

@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import FileWatching
 // AVFoundation's audio types (`AVAudioPCMBuffer`, `AVAudioConverterInputBlock`, etc.)
@@ -138,11 +139,11 @@ extension World {
                 Publisher { continuation throws(ArticleEditorError) in
                     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmedName.isEmpty else {
-                        throw .fileWriteFailed(path: trimmedName, reason: "Name can't be empty")
+                        throw .fileWriteFailed(path: trimmedName, reason: String(localized: L.Resource.App.nameCantBeEmpty))
                     }
                     let fileURL = articlesDir.appendingPathComponent("\(trimmedName).json")
                     guard !FileManager.default.fileExists(atPath: fileURL.path) else {
-                        throw .fileWriteFailed(path: fileURL.path, reason: "An article named \"\(trimmedName)\" already exists")
+                        throw .fileWriteFailed(path: fileURL.path, reason: String(localized: L.Resource.App.articleAlreadyExists(trimmedName)))
                     }
                     let existingNumbers: [Int]
                     switch loadAllArticles() {
@@ -303,11 +304,11 @@ extension World {
                     #if os(macOS)
                     await MainActor.run {
                         let alert = NSAlert()
-                        alert.messageText = "Unsaved Changes"
-                        alert.informativeText = "Do you want to save your changes before quitting?"
-                        alert.addButton(withTitle: "Save and Quit")
-                        alert.addButton(withTitle: "Discard and Quit")
-                        alert.addButton(withTitle: "Cancel")
+                        alert.messageText = String(localized: L.Resource.App.unsavedChangesTitle)
+                        alert.informativeText = String(localized: L.Resource.App.saveBeforeQuitting)
+                        alert.addButton(withTitle: String(localized: L.Resource.App.saveAndQuit))
+                        alert.addButton(withTitle: String(localized: L.Resource.App.discardAndQuit))
+                        alert.addButton(withTitle: String(localized: L.Resource.Common.cancel))
                         switch alert.runModal() {
                         case .alertFirstButtonReturn: continuation.yield(.saveAndQuit)
                         case .alertSecondButtonReturn: continuation.yield(.discardAndQuit)
@@ -386,7 +387,7 @@ extension World {
                     // hands back a degenerate 0Hz/0-channel format; `installTap` then traps with
                     // an uncatchable format-validation assertion the instant the app resumes.
                     guard await AVAudioApplication.requestRecordPermission() else {
-                        throw .microphoneUnavailable(reason: "Microphone access was denied")
+                        throw .microphoneUnavailable(reason: String(localized: L.Resource.App.microphoneDenied))
                     }
                     let speechAuthorized = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
                         SFSpeechRecognizer.requestAuthorization { status in
@@ -427,7 +428,7 @@ extension World {
                     // Permission is granted by this point, but guard anyway — `installTap`'s
                     // format-validation failure is an uncatchable assertion, not a thrown error.
                     guard nativeFormat.sampleRate > 0, nativeFormat.channelCount > 0 else {
-                        throw .microphoneUnavailable(reason: "No valid audio input format is available")
+                        throw .microphoneUnavailable(reason: String(localized: L.Resource.App.noAudioInputFormat))
                     }
                     // The hardware's native tap format is 32-bit float (confirmed on a real
                     // device: installing the tap with `nativeFormat` directly crashed inside

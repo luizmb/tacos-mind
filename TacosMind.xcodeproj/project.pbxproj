@@ -13,6 +13,10 @@
 		F6495E55A3DE4DBBA3F91F92 /* TacosMindApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A981BC68D4C1AED48536D982 /* TacosMindApp.swift */; };
 		BBA9605AE8E9A421AFA5DA4D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 985B65E23B66CBE5A969D984 /* Assets.xcassets */; };
 		7C1BC5054075483578652D9B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 985B65E23B66CBE5A969D984 /* Assets.xcassets */; };
+		C1A2B3C4D5E6F70812345673 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70812345671 /* Localizable.xcstrings */; };
+		C1A2B3C4D5E6F70812345674 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70812345671 /* Localizable.xcstrings */; };
+		C1A2B3C4D5E6F70812345675 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70812345672 /* InfoPlist.xcstrings */; };
+		C1A2B3C4D5E6F70812345676 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C1A2B3C4D5E6F70812345672 /* InfoPlist.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +26,8 @@
 		827275E2EF6A2394487320D3 /* TacosMind-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "TacosMind-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A981BC68D4C1AED48536D982 /* TacosMindApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TacosMindApp.swift; sourceTree = "<group>"; };
 		F57C3FD84833F526646EF661 /* TacosMind */ = {isa = PBXFileReference; lastKnownFileType = folder; name = TacosMind; path = .; sourceTree = SOURCE_ROOT; };
+		C1A2B3C4D5E6F70812345671 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		C1A2B3C4D5E6F70812345672 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,12 +50,16 @@
 			isa = PBXResourcesBuildPhase;
 			files = (
 				BBA9605AE8E9A421AFA5DA4D /* Assets.xcassets in Resources */,
+				C1A2B3C4D5E6F70812345673 /* Localizable.xcstrings in Resources */,
+				C1A2B3C4D5E6F70812345675 /* InfoPlist.xcstrings in Resources */,
 			);
 		};
 		5754E80D9AFF26BF0EF5E0D3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 				7C1BC5054075483578652D9B /* Assets.xcassets in Resources */,
+				C1A2B3C4D5E6F70812345674 /* Localizable.xcstrings in Resources */,
+				C1A2B3C4D5E6F70812345676 /* InfoPlist.xcstrings in Resources */,
 			);
 		};
 /* End PBXResourcesBuildPhase section */
@@ -87,6 +97,8 @@
 			children = (
 				A981BC68D4C1AED48536D982 /* TacosMindApp.swift */,
 				985B65E23B66CBE5A969D984 /* Assets.xcassets */,
+				C1A2B3C4D5E6F70812345671 /* Localizable.xcstrings */,
+				C1A2B3C4D5E6F70812345672 /* InfoPlist.xcstrings */,
 			);
 			name = App;
 			path = Sources/App;
@@ -150,11 +162,19 @@
 				LastUpgradeCheck = 1430;
 			};
 			buildConfigurationList = 5BF6458B87A8CA9B907564DF /* Build configuration list for PBXProject "TacosMind" */;
-			developmentRegion = en;
+			developmentRegion = "en-GB";
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
 				en,
+				"en-GB",
+				"pt-BR",
+				"es-ES",
+				"de-DE",
+				pl,
+				fr,
+				it,
+				"zh-Hans",
 			);
 			mainGroup = B27C3C492BBD68562C09E3FD;
 			minimizedProjectReferenceProxies = 1;
@@ -193,6 +213,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
 			buildSettings = {
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -221,6 +242,7 @@
 		5EFCBD4530C3056F4D3593CC /* Release configuration for PBXProject "TacosMind" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -275,6 +297,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
 			buildSettings = {
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 17;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -307,6 +330,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
 			buildSettings = {
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
@@ -336,6 +360,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 2DD0F4A66F98CB0A931DA619 /* Shared.xcconfig */;
 			buildSettings = {
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CURRENT_PROJECT_VERSION = 17;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -367,6 +392,7 @@
 		ED4C9CE4758C67CA8BE435BA /* Debug configuration for PBXProject "TacosMind" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -465,7 +491,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SwiftRex/SwiftRex.git";
 			requirement = {
-				branch = main;
+				branch = "feature/localized-resource-leaf";
 				kind = branch;
 			};
 			traits = (

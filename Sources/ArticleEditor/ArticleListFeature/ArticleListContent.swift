@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import SwiftUI
 import Vitral
@@ -9,7 +10,7 @@ public struct ArticleListContent: View {
     let selectedSlug: String?
     let isCreatingArticle: Binding<Bool>
     let newArticleName: Binding<String>
-    let createError: String?
+    let createError: LocalizedStringResource?
     let onSelect: (ArticleSummary) -> Void
     let onRequestNewArticle: () -> Void
     let onConfirmNewArticle: () -> Void
@@ -45,19 +46,19 @@ public struct ArticleListContent: View {
             }
             }
         }
-        .searchable(text: searchText, prompt: "Search articles")
-        .navigationTitle("Articles")
+        .searchable(text: searchText, prompt: L.List.searchArticles)
+        .navigationTitle(L.List.articles)
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button(action: onRequestNewArticle) {
-                    Label("New Article", systemImage: "plus")
+                    Label(L.List.newArticle, systemImage: "plus")
                 }
             }
         }
-        .alert("New Article", isPresented: isCreatingArticle) {
-            TextField("Name", text: newArticleName)
-            Button("Create", action: onConfirmNewArticle)
-            Button("Cancel", role: .cancel) {}
+        .alert(L.List.newArticle, isPresented: isCreatingArticle) {
+            TextField(L.List.name, text: newArticleName)
+            Button(L.List.create, action: onConfirmNewArticle)
+            Button(L.Common.cancel, role: .cancel) {}
         }
         // Not inside the alert's own `message:` — a native `Alert` dismisses itself the
         // instant ANY button is tapped, including "Create," so by the time an async
@@ -66,7 +67,7 @@ public struct ArticleListContent: View {
         // that can actually show it.
         .safeAreaInset(edge: .bottom) {
             if let createError {
-                Banner(Text(verbatim: createError), style: .error)
+                Banner(Text(createError), style: .error)
                     .padding(Space.small)
             }
         }

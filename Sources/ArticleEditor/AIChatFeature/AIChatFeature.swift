@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import CoreFP
 import CoreFPOperators
@@ -27,7 +28,7 @@ public enum AIChatFeature {
         public var draftText: String
         public var fieldMode: FieldMode
         public var turns: [ChatTurn]
-        public var lastError: String?
+        public var lastError: LocalizedStringResource?
         /// Mirrors the open article's Brainstorming field — seeded when the panel is
         /// presented and kept current by an app-level bridge (see `AppFeature.swift`),
         /// never edited directly from this feature.
@@ -120,7 +121,7 @@ public enum AIChatFeature {
         public var draftText: String
         public var isFieldEditable: Bool
         public var turns: [ChatTurn]
-        public var lastError: String?
+        public var lastError: LocalizedStringResource?
         public var isConfirmingClose: Bool
     }
 
@@ -403,21 +404,21 @@ public enum AIChatFeature {
 }
 
 extension ChatError {
-    var readableDescription: String {
+    var readableDescription: LocalizedStringResource {
         switch self {
-        case .modelUnavailable: "The on-device assistant isn't available right now."
-        case .generationFailed(let reason): "The assistant couldn't reply: \(reason)"
+        case .modelUnavailable: L.Resource.Chat.assistantNotAvailableNow
+        case .generationFailed(let reason): L.Resource.Chat.couldNotReply(reason)
         }
     }
 }
 
 extension SpeechError {
-    var readableDescription: String {
+    var readableDescription: LocalizedStringResource {
         switch self {
-        case .recognizerUnavailable: "Speech recognition isn't available right now."
-        case .microphoneUnavailable(let reason): "Couldn't use the microphone: \(reason)"
-        case .recognitionFailed(let reason): "Couldn't understand that: \(reason)"
-        case .synthesisFailed(let reason): "Couldn't speak the reply: \(reason)"
+        case .recognizerUnavailable: L.Resource.Chat.speechNotAvailable
+        case .microphoneUnavailable(let reason): L.Resource.Chat.couldNotUseMicrophone(reason)
+        case .recognitionFailed(let reason): L.Resource.Chat.couldNotUnderstand(reason)
+        case .synthesisFailed(let reason): L.Resource.Chat.couldNotSpeak(reason)
         }
     }
 }

@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import SwiftUI
 import Vitral
@@ -13,7 +14,7 @@ public struct GitHubSyncContent: View {
     let canOverwriteKeptLocal: Bool
     let isPushing: Bool
     let lastPushOutcome: PushOutcome?
-    let lastError: String?
+    let lastError: LocalizedStringResource?
     let isConfirmingOverwrite: Binding<Bool>
     let onDone: () -> Void
     let onRequestLink: () -> Void
@@ -49,14 +50,14 @@ public struct GitHubSyncContent: View {
                     }
                 }
             }
-            .navigationTitle("GitHub Sync")
+            .navigationTitle(L.Common.githubSync)
             .toolbar {
                 // macOS sheets get no close affordance for free — without this the sheet
                 // (confirmed via screenshot) has no way to dismiss at all. Dispatches
                 // rather than calling SwiftUI's `dismiss()`, so the store stays the only
                 // thing that decides whether this sheet is up.
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", action: onDone)
+                    Button(L.Common.done, action: onDone)
                 }
             }
             .navigationDestination(for: GitHubSyncRoute.self) { route in
@@ -68,25 +69,25 @@ public struct GitHubSyncContent: View {
             }
         }
         .confirmationDialog(
-            "Unlink this repository?",
+            L.Sync.unlinkThisRepository,
             isPresented: isConfirmingUnlink,
             titleVisibility: .visible
         ) {
-            Button("Unlink", role: .destructive, action: onConfirmUnlink)
-            Button("Cancel", role: .cancel) {}
+            Button(L.Sync.unlink, role: .destructive, action: onConfirmUnlink)
+            Button(L.Common.cancel, role: .cancel) {}
         } message: {
-            Text("Local articles are kept — you'll just need to link again to sync them.")
+            Text(L.Sync.localArticlesAreKeptYoull)
         }
         .confirmationDialog(
-            "Discard your local changes?",
+            L.Sync.discardYourLocalChanges,
             isPresented: isConfirmingOverwrite,
             titleVisibility: .visible
         ) {
-            Button("Overwrite with GitHub's Version", role: .destructive, action: onConfirmOverwriteKeptLocal)
-            Button("Cancel", role: .cancel) {}
+            Button(L.Sync.overwriteWithGithubsVersion, role: .destructive, action: onConfirmOverwriteKeptLocal)
+            Button(L.Common.cancel, role: .cancel) {}
         } message: {
             if let keptLocal = lastPullOutcome?.keptLocal, !keptLocal.isEmpty {
-                Text("\(keptLocal.joined(separator: ", ")) will be replaced by what's on GitHub. This can't be undone.")
+                Text(L.Sync.willBeReplacedByWhats(keptLocal.joined(separator: ", ")))
             }
         }
     }
@@ -94,26 +95,26 @@ public struct GitHubSyncContent: View {
     @ViewBuilder
     private var repositorySection: some View {
         if isConfigured {
-            Section("Repository") {
-                LabeledContent("Repo", value: repoURL)
-                LabeledContent("Base branch", value: baseBranch)
-                Button("Edit Base Branch", action: onRequestEditBranch)
-                Button("Unlink", role: .destructive, action: onRequestUnlink)
+            Section(L.Sync.repository) {
+                LabeledContent(L.Sync.repo, value: repoURL)
+                LabeledContent(L.Sync.baseBranch, value: baseBranch)
+                Button(L.Sync.editBaseBranch, action: onRequestEditBranch)
+                Button(L.Sync.unlink, role: .destructive, action: onRequestUnlink)
                     .disabled(isUnlinking)
             }
         } else {
-            Section("Repository") {
-                Text("Not linked to a GitHub repository yet.")
+            Section(L.Sync.repository) {
+                Text(L.Sync.notLinkedToAGithub)
                     .foregroundStyle(.secondary)
-                Button("Link Repository", action: onRequestLink)
+                Button(L.Sync.linkRepository, action: onRequestLink)
             }
         }
     }
 
     private var actionsSection: some View {
-        Section("Actions") {
+        Section(L.Sync.actions) {
             actionRow(
-                title: "Pull from GitHub",
+                title: L.Sync.pullFromGithub,
                 systemImage: "arrow.down.circle",
                 isBusy: isPulling,
                 disabled: !isConfigured || isPulling,
@@ -123,7 +124,7 @@ public struct GitHubSyncContent: View {
                 pullOutcomeView(lastPullOutcome)
             }
             actionRow(
-                title: "Push to GitHub",
+                title: L.Sync.pushToGithub,
                 systemImage: "arrow.up.circle",
                 isBusy: isPushing,
                 disabled: !isConfigured || isPushing,
@@ -136,7 +137,7 @@ public struct GitHubSyncContent: View {
     }
 
     private func actionRow(
-        title: String,
+        title: LocalizedStringKey,
         systemImage: String,
         isBusy: Bool,
         disabled: Bool,
@@ -161,22 +162,22 @@ public struct GitHubSyncContent: View {
     private func pullOutcomeView(_ outcome: PullOutcome) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             if outcome.applied == 0, outcome.keptLocal.isEmpty {
-                Text("Already up to date.")
+                Text(L.Sync.alreadyUpToDate)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else if outcome.applied > 0 {
-                Text("Pulled \(outcome.applied) article\(outcome.applied == 1 ? "" : "s").")
+                Text(L.Sync.pulledArticle(outcome.applied))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             if !outcome.keptLocal.isEmpty {
-                Text("Kept your local version of \(outcome.keptLocal.joined(separator: ", ")). Push to publish.")
+                Text(L.Sync.keptYourLocalVersionOf(outcome.keptLocal.joined(separator: ", ")))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
         if canOverwriteKeptLocal {
-            Button("Overwrite Local with GitHub's Version", role: .destructive, action: onRequestOverwriteKeptLocal)
+            Button(L.Sync.overwriteLocalWithGithubsVersion, role: .destructive, action: onRequestOverwriteKeptLocal)
                 .disabled(isPulling)
         }
     }
@@ -185,15 +186,15 @@ public struct GitHubSyncContent: View {
     private func pushOutcomeView(_ outcome: PushOutcome) -> some View {
         switch outcome {
         case .nothingToPush:
-            Text("Nothing to push — everything's already on GitHub.")
+            Text(L.Sync.nothingToPushEverythingsAlready)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .pushed(let files, let branch, let commitURL, let prURL):
             VStack(alignment: .leading, spacing: 4) {
-                Text("Pushed \(files.count) file(s) to \(branch): \(files.joined(separator: ", "))")
+                Text(L.Sync.pushedFileSTo(files.count, branch, files.joined(separator: ", ")))
                     .font(.footnote)
-                Link("View Pull Request", destination: prURL)
-                Link("View Commit", destination: commitURL)
+                Link(L.Sync.viewPullRequest, destination: prURL)
+                Link(L.Sync.viewCommit, destination: commitURL)
             }
         }
     }

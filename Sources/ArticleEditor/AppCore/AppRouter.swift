@@ -1,3 +1,4 @@
+import Localization
 import AIChatFeature
 import AppDomain
 import ArticleEditorFeature
@@ -60,8 +61,8 @@ public struct AppRouter {
             destination(for: route)
         } else {
             EmptyState(
-                "No Article Open",
-                message: Text("Choose an article from the sidebar."),
+                L.App.noArticleOpen,
+                message: Text(L.App.chooseAnArticleFromThe),
                 icon: Image(systemName: "doc.text")
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -24,7 +24,7 @@ let package = Package(
         .package(url: "https://github.com/luizmb/FP.git", from: "3.0.0"),
         .package(url: "https://github.com/luizmb/Hourglass.git", from: "1.0.1"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.1"),
-        .package(url: "https://github.com/SwiftRex/SwiftRex.git", branch: "main", traits: ["ReactiveConcurrency"]),
+        .package(url: "https://github.com/SwiftRex/SwiftRex.git", branch: "feature/localized-resource-leaf", traits: ["ReactiveConcurrency"]),
         .package(url: "https://github.com/luizmb/ReactiveConcurrency.git", from: "2.0.0"),
         .package(url: "https://github.com/luizmb/NetworkTools.git", from: "0.9.0"),
     ] + vitralPackage,
@@ -62,6 +62,12 @@ let package = Package(
 
         // MARK: - ArticleEditor: shared domain types
 
+        // Every string on screen, by token (`L.Editor.save`), generated from the app's string catalog
+
+        // by Scripts/GenerateStrings.swift.
+
+        .target(name: "Localization", path: "Sources/ArticleEditor/Localization"),
+
         .target(
             name: "AppDomain",
             dependencies: [
@@ -90,6 +96,7 @@ let package = Package(
         .target(
             name: "ArticleListFeature",
             dependencies: [
+                "Localization",
             ] + vitral + [
                 "AppDomain",
                 "GeneratorCore",
@@ -109,6 +116,7 @@ let package = Package(
         .target(
             name: "ArticleEditorFeature",
             dependencies: [
+                "Localization",
             ] + vitral + [
                 "AppDomain",
                 "FileWatching",
@@ -129,6 +137,7 @@ let package = Package(
         .target(
             name: "AIChatFeature",
             dependencies: [
+                "Localization",
             ] + vitral + [
                 "AppDomain",
                 .product(name: "SwiftRex", package: "SwiftRex"),
@@ -147,6 +156,7 @@ let package = Package(
         .target(
             name: "GitHubSyncFeature",
             dependencies: [
+                "Localization",
             ] + vitral + [
                 "AppDomain",
                 .product(name: "SwiftRex", package: "SwiftRex"),
@@ -167,6 +177,7 @@ let package = Package(
         .target(
             name: "AppCore",
             dependencies: [
+                "Localization",
             ] + vitral + [
                 "AppDomain",
                 "FileWatching",
