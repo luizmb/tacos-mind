@@ -491,7 +491,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/SwiftRex/SwiftRex.git";
 			requirement = {
-				branch = "feature/localized-resource-leaf";
+				branch = main;
 				kind = branch;
 			};
 			traits = (
