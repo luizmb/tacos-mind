@@ -4,7 +4,7 @@ import PackageDescription
 // Vitral's SwiftUI components exist only on Apple platforms; elsewhere (the Linux build of Meow)
 // the package is left out altogether, so its missing product isn't looked for.
 #if canImport(Darwin)
-let vitralPackage: [Package.Dependency] = [.package(url: "https://github.com/luizmb/Vitral.git", from: "0.2.5")]
+let vitralPackage: [Package.Dependency] = [.package(url: "https://github.com/luizmb/Vitral.git", from: "0.2.7")]
 let vitral: [Target.Dependency] = [
     .product(name: "Vitral", package: "Vitral"),
     .product(name: "VitralTokens", package: "Vitral"),
