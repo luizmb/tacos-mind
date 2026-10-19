@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import CoreFP
 import CoreFPOperators
@@ -33,7 +34,7 @@ public enum GitHubSyncFeature {
         public var linkBranchInput: String
         public var linkTokenInput: String
         public var isLinking: Bool
-        public var linkError: String?
+        public var linkError: LocalizedStringResource?
 
         // Unlink confirmation.
         public var isConfirmingUnlink: Bool
@@ -65,7 +66,7 @@ public enum GitHubSyncFeature {
         public var pushPRTitleInput: String
         public var pushPRBodyInput: String
 
-        public var lastError: String?
+        public var lastError: LocalizedStringResource?
 
         public init() {
             path = []
@@ -197,7 +198,7 @@ public enum GitHubSyncFeature {
         public var linkBranchInput: String
         public var linkTokenInput: String
         public var isLinking: Bool
-        public var linkError: String?
+        public var linkError: LocalizedStringResource?
 
         public var isConfirmingUnlink: Bool
         public var isUnlinking: Bool
@@ -222,7 +223,7 @@ public enum GitHubSyncFeature {
         /// only thing the view needs from `pendingPushPreview`.
         public var pushFileCount: Int
 
-        public var lastError: String?
+        public var lastError: LocalizedStringResource?
     }
 
     @Prisms
@@ -371,7 +372,7 @@ public enum GitHubSyncFeature {
             case .confirmLink:
                 guard let state = context.stateBefore else { return .doNothing }
                 guard !state.linkRepoInput.isEmpty, !state.linkBranchInput.isEmpty, !state.linkTokenInput.isEmpty else {
-                    return .reduce { $0.linkError = "Fill in the repo, branch, and token." }
+                    return .reduce { $0.linkError = L.Resource.Sync.fillInTheRepo }
                 }
                 let settings = GitHubSettings(
                     repoURL: state.linkRepoInput,
@@ -713,13 +714,13 @@ public enum GitHubSyncFeature {
 }
 
 extension GitHubError {
-    var readableDescription: String {
+    var readableDescription: LocalizedStringResource {
         switch self {
-        case .notConfigured: "Link a repo first."
-        case .invalidRepoURL: "That doesn't look like a valid GitHub repo URL."
-        case .network(let reason): "Network error: \(reason)"
-        case .badStatus(let code): "GitHub returned HTTP \(code)."
-        case .decoding(let reason): "Couldn't read GitHub's response: \(reason)"
+        case .notConfigured: L.Resource.Sync.linkARepoFirst
+        case .invalidRepoURL: L.Resource.Sync.invalidRepoURL
+        case .network(let reason): L.Resource.Sync.networkError(reason)
+        case .badStatus(let code): L.Resource.Sync.badStatus(code)
+        case .decoding(let reason): L.Resource.Sync.couldNotReadResponse(reason)
         }
     }
 }

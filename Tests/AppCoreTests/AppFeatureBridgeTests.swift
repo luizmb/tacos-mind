@@ -7,6 +7,7 @@ import GitHubSyncFeature
 import ReactiveConcurrency
 import SwiftRex
 import SwiftRexTesting
+import Localization
 import Testing
 
 @testable import AppCore
@@ -190,7 +191,7 @@ struct AppFeatureBridgeTests {
 
         #expect(store.state.openEditor?.opened == open)
         #expect(store.state.openEditor?.document?.hasUnsavedChanges == true)
-        #expect(store.state.discardPrompt == .saveFailed("Couldn't write /tmp/Articles/pure-functions.json: disk full"))
+        #expect(store.state.discardPrompt == .saveFailed(L.Resource.Common.couldNotWrite("/tmp/Articles/pure-functions.json", "disk full")))
 
         // Answering it is the user choosing to lose the work — which is theirs to choose.
         store.dispatch(.navigation(.resumePending)) { state in

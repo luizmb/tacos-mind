@@ -3,6 +3,7 @@ import Foundation
 import ReactiveConcurrency
 import SwiftRex
 import SwiftRexTesting
+import Localization
 import Testing
 
 @testable import ArticleListFeature
@@ -96,7 +97,7 @@ struct ArticleListFeatureTests {
                 Issue.record("expected a failed creation")
                 return
             }
-            state.createError = "Couldn't write /tmp/Articles/existing-article.json: An article named \"existing-article\" already exists"
+            state.createError = L.Resource.Common.couldNotWrite("/tmp/Articles/existing-article.json", "An article named \"existing-article\" already exists")
         }
     }
 }

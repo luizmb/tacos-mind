@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import CoreFP
 import Foundation
@@ -23,7 +24,7 @@ public enum ArticleListFeature {
         /// SwiftUI `@State`, same convention as every other confirmation/prompt in this app.
         public var isCreatingArticle: Bool
         public var newArticleName: String
-        public var createError: String?
+        public var createError: LocalizedStringResource?
 
         public init(
             summaries: [ArticleSummary] = [],
@@ -31,7 +32,7 @@ public enum ArticleListFeature {
             selectedSlug: String? = nil,
             isCreatingArticle: Bool = false,
             newArticleName: String = "",
-            createError: String? = nil
+            createError: LocalizedStringResource? = nil
         ) {
             self.summaries = summaries
             self.searchText = searchText
@@ -77,7 +78,7 @@ public enum ArticleListFeature {
         public var selectedSlug: String?
         public var isCreatingArticle: Bool
         public var newArticleName: String
-        public var createError: String?
+        public var createError: LocalizedStringResource?
     }
 
     @Prisms
@@ -166,7 +167,7 @@ public enum ArticleListFeature {
 
             case .confirmNewArticle:
                 guard let name = context.stateBefore?.newArticleName, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    return .reduce { $0.createError = "Enter a name first." }
+                    return .reduce { $0.createError = L.Resource.List.enterANameFirst }
                 }
                 return .produce { ctx in ctx.environment.createArticle(name).asEffect { Action.created($0) } }
 
@@ -198,11 +199,11 @@ public enum ArticleListFeature {
 }
 
 extension ArticleEditorError {
-    fileprivate var readableDescription: String {
+    fileprivate var readableDescription: LocalizedStringResource {
         switch self {
-        case .fileReadFailed(let path, let reason): "Couldn't read \(path): \(reason)"
-        case .fileWriteFailed(let path, let reason): "Couldn't write \(path): \(reason)"
-        case .parseFailed(let path, let reason): "Couldn't parse \(path): \(reason)"
+        case .fileReadFailed(let path, let reason): L.Resource.Common.couldNotRead(path, reason)
+        case .fileWriteFailed(let path, let reason): L.Resource.Common.couldNotWrite(path, reason)
+        case .parseFailed(let path, let reason): L.Resource.Common.couldNotParse(path, reason)
         }
     }
 }

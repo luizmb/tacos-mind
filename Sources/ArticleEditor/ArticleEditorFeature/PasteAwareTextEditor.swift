@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import CoreText
 import Foundation
@@ -256,14 +257,14 @@ private final class LinkPastingNSTextView: NSTextView {
     private func insertSelectionLinkItems(into menu: NSMenu, over selection: NSRange) {
         menu.insertItem(.separator(), at: 0)
         if let pasteURL = pastedURLString(from: .general) {
-            menu.insertItem(ClosureMenuItem(title: "Paste Link") { [weak self] in
+            menu.insertItem(ClosureMenuItem(title: String(localized: L.Resource.Editor.pasteLink)) { [weak self] in
                 self?.applyLink(externalURL: pasteURL, over: selection)
             }, at: 0)
         }
-        menu.insertItem(ClosureMenuItem(title: "Link to Web…") { [weak self] in
+        menu.insertItem(ClosureMenuItem(title: String(localized: L.Resource.Editor.linkToWeb)) { [weak self] in
             self?.presentWebLinkPrompt(initialURL: "") { url in self?.applyLink(externalURL: url, over: selection) }
         }, at: 0)
-        let articleItem = NSMenuItem(title: "Link to Article", action: nil, keyEquivalent: "")
+        let articleItem = NSMenuItem(title: String(localized: L.Resource.Editor.linkToArticle), action: nil, keyEquivalent: "")
         let articleSubmenu = NSMenu()
         articleSubmenu.items = makeArticleItems { [weak self] slug in self?.applyLink(slug: slug, over: selection) }
         articleItem.submenu = articleSubmenu
@@ -277,20 +278,20 @@ private final class LinkPastingNSTextView: NSTextView {
     }
 
     private func makeEditLinkItem(for link: DetectedLink) -> NSMenuItem {
-        let parentItem = NSMenuItem(title: "Edit Link", action: nil, keyEquivalent: "")
+        let parentItem = NSMenuItem(title: String(localized: L.Resource.Editor.editLink), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         switch link.kind {
         case .internalSlug:
             submenu.items = makeArticleItems { [weak self] slug in self?.replaceLink(link, withSlug: slug) } + [.separator()]
         case .external(let url, _):
             submenu.items = [
-                ClosureMenuItem(title: "Change URL…") { [weak self] in
+                ClosureMenuItem(title: String(localized: L.Resource.Editor.changeURL)) { [weak self] in
                     self?.presentWebLinkPrompt(initialURL: url) { newURL in self?.replaceLink(link, withURL: newURL) }
                 },
                 .separator()
             ]
         }
-        submenu.addItem(ClosureMenuItem(title: "Remove Link") { [weak self] in self?.removeLink(link) })
+        submenu.addItem(ClosureMenuItem(title: String(localized: L.Resource.Editor.removeLink)) { [weak self] in self?.removeLink(link) })
         parentItem.submenu = submenu
         return parentItem
     }
@@ -320,13 +321,13 @@ private final class LinkPastingNSTextView: NSTextView {
     func presentWebLinkPrompt(initialURL: String, completion: @escaping (String) -> Void) {
         guard let window else { return }
         let alert = NSAlert()
-        alert.messageText = "Link to Web"
-        alert.informativeText = "Enter the URL"
+        alert.messageText = String(localized: L.Resource.Editor.linkToWebTitle)
+        alert.informativeText = String(localized: L.Resource.Editor.enterTheURL)
         let field = NSTextField(string: initialURL)
         field.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
         alert.accessoryView = field
         alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: String(localized: L.Resource.Common.cancel))
         alert.beginSheetModal(for: window) { response in
             guard response == .alertFirstButtonReturn else { return }
             let url = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -504,12 +505,12 @@ public struct PasteAwareTextEditor: UIViewRepresentable {
                         linkTextView.applyLink(slug: summary.slug, over: range)
                     }
                 }
-                items.append(UIMenu(title: "Link to Article", children: articleActions))
-                items.append(UIAction(title: "Link to Web…") { _ in
+                items.append(UIMenu(title: String(localized: L.Resource.Editor.linkToArticle), children: articleActions))
+                items.append(UIAction(title: String(localized: L.Resource.Editor.linkToWeb)) { _ in
                     linkTextView.presentWebLinkPrompt(initialURL: "") { url in linkTextView.applyLink(externalURL: url, over: range) }
                 })
                 if let pasteURL = pastedURLString(from: .general) {
-                    items.append(UIAction(title: "Paste Link") { _ in linkTextView.applyLink(externalURL: pasteURL, over: range) })
+                    items.append(UIAction(title: String(localized: L.Resource.Editor.pasteLink)) { _ in linkTextView.applyLink(externalURL: pasteURL, over: range) })
                 }
                 return UIMenu(children: items + [UIMenu(options: .displayInline, children: suggestedActions)])
             }
@@ -521,16 +522,16 @@ public struct PasteAwareTextEditor: UIViewRepresentable {
                 let articleActions = parent.allSummaries.map { summary in
                     UIAction(title: "#\(summary.number) — \(summary.title)") { _ in linkTextView.replaceLink(link, withSlug: summary.slug) }
                 }
-                editMenu = UIMenu(title: "Edit Link", children: [
+                editMenu = UIMenu(title: String(localized: L.Resource.Editor.editLink), children: [
                     UIMenu(options: .displayInline, children: articleActions),
-                    UIAction(title: "Remove Link", attributes: .destructive) { _ in linkTextView.removeLink(link) }
+                    UIAction(title: String(localized: L.Resource.Editor.removeLink), attributes: .destructive) { _ in linkTextView.removeLink(link) }
                 ])
             case .external(let url, _):
-                editMenu = UIMenu(title: "Edit Link", children: [
-                    UIAction(title: "Change URL…") { _ in
+                editMenu = UIMenu(title: String(localized: L.Resource.Editor.editLink), children: [
+                    UIAction(title: String(localized: L.Resource.Editor.changeURL)) { _ in
                         linkTextView.presentWebLinkPrompt(initialURL: url) { newURL in linkTextView.replaceLink(link, withURL: newURL) }
                     },
-                    UIAction(title: "Remove Link", attributes: .destructive) { _ in linkTextView.removeLink(link) }
+                    UIAction(title: String(localized: L.Resource.Editor.removeLink), attributes: .destructive) { _ in linkTextView.removeLink(link) }
                 ])
             }
             return UIMenu(children: [editMenu, UIMenu(options: .displayInline, children: suggestedActions)])
@@ -620,7 +621,7 @@ private final class LinkPastingUITextView: UITextView {
 
     func presentWebLinkPrompt(initialURL: String, completion: @escaping (String) -> Void) {
         guard let presenter = nearestViewController else { return }
-        let alert = UIAlertController(title: "Link to Web", message: "Enter the URL", preferredStyle: .alert)
+        let alert = UIAlertController(title: String(localized: L.Resource.Editor.linkToWebTitle), message: String(localized: L.Resource.Editor.enterTheURL), preferredStyle: .alert)
         alert.addTextField { field in
             field.text = initialURL
             field.placeholder = "https://…"
@@ -628,7 +629,7 @@ private final class LinkPastingUITextView: UITextView {
             field.autocapitalizationType = .none
             field.autocorrectionType = .no
         }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: String(localized: L.Resource.Common.cancel), style: .cancel))
         alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in
             let url = (alert.textFields?.first?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !url.isEmpty else { return }

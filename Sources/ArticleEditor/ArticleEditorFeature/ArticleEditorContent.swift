@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import Foundation
 import GeneratorCore
@@ -28,10 +29,10 @@ public struct ArticleEditorContent: View {
     let canUndo: Bool
     let canRedo: Bool
     let isSaving: Bool
-    let saveError: String?
+    let saveError: LocalizedStringResource?
     let conflict: ExternalChangeState
     let isBuilding: Bool
-    let buildStatus: String?
+    let buildStatus: LocalizedStringResource?
     let onToggleTag: (GeneratorCore.Tag) -> Void
     let onAddBlock: (ContentBlockKind, Int) -> Void
     let onRemoveBlock: (UUID) -> Void
@@ -66,23 +67,23 @@ public struct ArticleEditorContent: View {
                 blocksSection
             }
             .dropsFocusWhenScrolling()
-            .navigationTitle(title.wrappedValue.isEmpty ? "Untitled" : title.wrappedValue)
+            .navigationTitle(title.wrappedValue.isEmpty ? Text(L.Editor.untitled) : Text(verbatim: title.wrappedValue))
             .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) {
                 if let saveError {
-                    Banner(Text(verbatim: saveError), style: .error)
+                    Banner(Text(saveError), style: .error)
                         .padding(Space.small)
                 }
             }
             .confirmationDialog(
-                "Revert all unsaved changes?",
+                L.Editor.revertAllUnsavedChanges,
                 isPresented: isConfirmingRevert,
                 titleVisibility: .visible
             ) {
-                Button("Revert Changes", role: .destructive, action: onRevert)
-                Button("Cancel", role: .cancel) {}
+                Button(L.Editor.revertChanges, role: .destructive, action: onRevert)
+                Button(L.Common.cancel, role: .cancel) {}
             } message: {
-                Text("This discards every edit made since the last save and can't be undone.")
+                Text(L.Editor.thisDiscardsEveryEditMade)
             }
         }
     }
@@ -96,7 +97,7 @@ public struct ArticleEditorContent: View {
                 if isSaving {
                     ProgressView()
                 } else {
-                    Label(hasUnsavedChanges ? "Save*" : "Save", systemImage: "square.and.arrow.down")
+                    Label(hasUnsavedChanges ? L.Editor.saveUnsaved : L.Common.save, systemImage: "square.and.arrow.down")
                 }
             }
             .disabled(isSaving || !hasUnsavedChanges)
@@ -104,14 +105,14 @@ public struct ArticleEditorContent: View {
         }
         ToolbarItem(placement: .automatic) {
             Button(action: onUndo) {
-                Label("Undo", systemImage: "arrow.uturn.backward")
+                Label(L.Editor.undo, systemImage: "arrow.uturn.backward")
             }
             .disabled(!canUndo)
             .keyboardShortcut("z", modifiers: .command)
         }
         ToolbarItem(placement: .automatic) {
             Button(action: onRedo) {
-                Label("Redo", systemImage: "arrow.uturn.forward")
+                Label(L.Editor.redo, systemImage: "arrow.uturn.forward")
             }
             .disabled(!canRedo)
             .keyboardShortcut("z", modifiers: [.command, .shift])
@@ -120,7 +121,7 @@ public struct ArticleEditorContent: View {
             Button(role: .destructive, action: onRequestRevert) {
                 // Distinct from Undo's icon on purpose — Revert jumps all the way back
                 // to the last save in one shot, not one step back.
-                Label("Revert Changes", systemImage: "arrow.counterclockwise")
+                Label(L.Editor.revertChanges, systemImage: "arrow.counterclockwise")
             }
             .disabled(!hasUnsavedChanges)
         }
@@ -131,41 +132,41 @@ public struct ArticleEditorContent: View {
                 if isBuilding {
                     ProgressView()
                 } else {
-                    Label("Build", systemImage: "hammer")
+                    Label(L.Editor.build, systemImage: "hammer")
                 }
             }
             .disabled(isBuilding)
-            .help(buildStatus ?? "Generate the full site")
+            .help(Text(buildStatus ?? L.Resource.Editor.generateTheFullSite))
             .keyboardShortcut("b", modifiers: .command)
         }
         ToolbarItem(placement: .automatic) {
             Button {
                 onRun()
             } label: {
-                Label("Run", systemImage: "play.fill")
+                Label(L.Editor.run, systemImage: "play.fill")
             }
             .disabled(!isDocumentOpen)
-            .help("Generate this article and open it in the browser")
+            .help(L.Editor.generateThisArticleAndOpen)
             .keyboardShortcut("r", modifiers: .command)
         }
     }
 
     private var conflictBanner: some View {
         Section {
-            Banner("This file changed on disk while you were editing it.", style: .warning)
+            Banner(L.Editor.thisFileChangedOnDisk, style: .warning)
                 .trailing {
                     HStack(spacing: Space.small) {
-                        ButtonSecondary("Keep Mine", size: .small, action: onKeepMine)
-                        ButtonPrimary("Reload Theirs", size: .small, action: onReloadTheirs)
+                        ButtonSecondary(L.Editor.keepMine, size: .small, action: onKeepMine)
+                        ButtonPrimary(L.Editor.reloadTheirs, size: .small, action: onReloadTheirs)
                     }
                 }
         }
     }
 
     private var metadataSection: some View {
-        Section("Metadata") {
+        Section(L.Editor.metadata) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Title")
+                Text(L.Common.title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 PasteAwareTextEditor(
@@ -176,14 +177,14 @@ public struct ArticleEditorContent: View {
                     isLinkAware: false
                 )
             }
-            TextField("Slug", text: slug)
-            TextField("Author", text: author)
-            Picker("Emphasis", selection: emphasis) {
-                Text("Text").tag(Emphasis.text)
-                Text("Video").tag(Emphasis.video)
+            TextField(L.Editor.slug, text: slug)
+            TextField(L.Editor.author, text: author)
+            Picker(L.Editor.emphasis, selection: emphasis) {
+                Text(L.Editor.text).tag(Emphasis.text)
+                Text(L.Editor.video).tag(Emphasis.video)
             }
-            Toggle("Draft", isOn: draft)
-            Stepper("Number: \(number.wrappedValue)", value: number, in: 0...999)
+            Toggle(L.Editor.draft, isOn: draft)
+            Stepper(L.Editor.number(number.wrappedValue), value: number, in: 0...999)
             publishedField
         }
     }
@@ -196,10 +197,10 @@ public struct ArticleEditorContent: View {
             }
         )
         return VStack(alignment: .leading) {
-            Toggle("Published", isOn: isPublished)
+            Toggle(L.Editor.published, isOn: isPublished)
             if published.wrappedValue != nil {
                 DatePicker(
-                    "Date",
+                    L.Editor.date,
                     selection: Binding<Date>(
                         get: { (published.wrappedValue ?? todayPublicationDate()).asDate },
                         set: { published.wrappedValue = PublicationDate(date: $0) }
@@ -213,7 +214,7 @@ public struct ArticleEditorContent: View {
     }
 
     private var tagsSection: some View {
-        Section("Tags") {
+        Section(L.Editor.tags) {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(sortedTags, id: \.self) { tag in
@@ -233,7 +234,7 @@ public struct ArticleEditorContent: View {
     }
 
     private var blocksSection: some View {
-        Section("Blocks") {
+        Section(L.Editor.blocks) {
             ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
                 BlockRow(
                     block: block,
@@ -256,10 +257,10 @@ public struct ArticleEditorContent: View {
 
             Menu {
                 ForEach(allBlockKinds) { kind in
-                    Button(kind.displayName) { onAddBlock(kind, blocks.count) }
+                    Button(L.domain(kind.displayName)) { onAddBlock(kind, blocks.count) }
                 }
             } label: {
-                Label("Add Block", systemImage: "plus")
+                Label(L.Editor.addBlock, systemImage: "plus")
             }
         }
     }
@@ -280,10 +281,10 @@ public struct ArticleEditorContent: View {
             )
         } header: {
             HStack {
-                Text("Brainstorming")
+                Text(L.Editor.brainstorming)
                 Spacer()
                 Button(action: onOpenChat) {
-                    Label("Ask Assistant", systemImage: "apple.intelligence")
+                    Label(L.Editor.askAssistant, systemImage: "apple.intelligence")
                 }
                 .buttonStyle(.plain)
                 .font(.footnote)
@@ -340,7 +341,7 @@ private struct BlockRow: View {
                     .font(.caption.bold())
                     .foregroundStyle(.secondary)
                 Spacer()
-                addBlockMenu(help: "Add block above", onAdd: onAddBefore)
+                addBlockMenu(help: L.Editor.addBlockAbove, onAdd: onAddBefore)
                 Button(action: onMoveUp) {
                     Image(systemName: "chevron.up")
                 }
@@ -351,7 +352,7 @@ private struct BlockRow: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(isLast)
-                addBlockMenu(help: "Add block below", onAdd: onAddAfter)
+                addBlockMenu(help: L.Editor.addBlockBelow, onAdd: onAddAfter)
                 Button(role: .destructive, action: onRemove) {
                     Image(systemName: "trash")
                 }
@@ -362,10 +363,10 @@ private struct BlockRow: View {
         .padding(.vertical, 4)
     }
 
-    private func addBlockMenu(help: String, onAdd: @escaping (ContentBlockKind) -> Void) -> some View {
+    private func addBlockMenu(help: LocalizedStringKey, onAdd: @escaping (ContentBlockKind) -> Void) -> some View {
         Menu {
             ForEach(allBlockKinds) { kind in
-                Button(kind.displayName) { onAdd(kind) }
+                Button(L.domain(kind.displayName)) { onAdd(kind) }
             }
         } label: {
             Image(systemName: "plus")
@@ -373,15 +374,15 @@ private struct BlockRow: View {
         .help(help)
     }
 
-    private var kindLabel: String {
+    private var kindLabel: LocalizedStringKey {
         switch block.block {
-        case .heading: "Heading"
-        case .paragraph: "Paragraph"
-        case .list: "List"
-        case .image: "Image"
-        case .video: "Video"
-        case .code: "Code"
-        case .equation: "Equation (read-only in v1)"
+        case .heading: L.Editor.heading
+        case .paragraph: L.Editor.paragraph
+        case .list: L.Editor.list
+        case .image: L.Editor.image
+        case .video: L.Editor.video
+        case .code: L.Editor.code
+        case .equation: L.Editor.equationReadOnly
         }
     }
 
@@ -389,12 +390,12 @@ private struct BlockRow: View {
     private var content: some View {
         switch block.block {
         case .heading(let level, let text):
-            Picker("Level", selection: Binding(
+            Picker(L.Editor.level, selection: Binding(
                 get: { level },
                 set: { onUpdate(.heading(level: $0, text: text)) }
             )) {
-                Text("Section").tag(HeadingLevel.section)
-                Text("Subsection").tag(HeadingLevel.subsection)
+                Text(L.Editor.section).tag(HeadingLevel.section)
+                Text(L.Editor.subsection).tag(HeadingLevel.subsection)
             }
             .pickerStyle(.segmented)
             PasteAwareTextEditor(
@@ -420,7 +421,7 @@ private struct BlockRow: View {
 
         case .list(let items, let bullet):
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                TextField("Item \(index + 1)", text: Binding(
+                TextField(L.Editor.item(index + 1), text: Binding(
                     get: { item },
                     set: { newValue in
                         var newItems = items
@@ -431,24 +432,24 @@ private struct BlockRow: View {
                 .font(SiteTypography.body)
             }
             HStack {
-                Button("Add item") { onUpdate(.list(items: items + [""], bullet: bullet)) }
+                Button(L.Editor.addItem) { onUpdate(.list(items: items + [""], bullet: bullet)) }
                 if items.count > 1 {
-                    Button("Remove last") { onUpdate(.list(items: Array(items.dropLast()), bullet: bullet)) }
+                    Button(L.Editor.removeLast) { onUpdate(.list(items: Array(items.dropLast()), bullet: bullet)) }
                 }
             }
             .font(.caption)
-            TextField("Bullet (optional, e.g. ✅)", text: Binding(
+            TextField(L.Editor.bulletOptionalEG, text: Binding(
                 get: { bullet ?? "" },
                 set: { onUpdate(.list(items: items, bullet: $0.isEmpty ? nil : $0)) }
             ))
 
         case .image(let url, let altText):
-            TextField("URL", text: Binding(get: { url }, set: { onUpdate(.image(url: $0, altText: altText)) }))
-            TextField("Alt text", text: Binding(get: { altText }, set: { onUpdate(.image(url: url, altText: $0)) }))
+            TextField(L.Editor.url, text: Binding(get: { url }, set: { onUpdate(.image(url: $0, altText: altText)) }))
+            TextField(L.Editor.altText, text: Binding(get: { altText }, set: { onUpdate(.image(url: url, altText: $0)) }))
 
         case .video(let url, let caption):
-            TextField("URL", text: Binding(get: { url }, set: { onUpdate(.video(url: $0, caption: caption)) }))
-            TextField("Caption (optional)", text: Binding(
+            TextField(L.Editor.url, text: Binding(get: { url }, set: { onUpdate(.video(url: $0, caption: caption)) }))
+            TextField(L.Editor.captionOptional, text: Binding(
                 get: { caption ?? "" },
                 set: { onUpdate(.video(url: url, caption: $0.isEmpty ? nil : $0)) }
             ))
@@ -466,7 +467,7 @@ private struct BlockRow: View {
             )
 
         case .equation:
-            Text("Equation blocks aren't editable yet — this one is preserved untouched on save.")
+            Text(L.Editor.equationBlocksArentEditableYet)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

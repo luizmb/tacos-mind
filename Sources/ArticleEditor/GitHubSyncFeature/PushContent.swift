@@ -1,3 +1,4 @@
+import Localization
 import SwiftUI
 import Vitral
 import VitralTokens
@@ -21,44 +22,44 @@ public struct PushContent: View {
     public var body: some View {
         GlassList(backdrop: .grid(), rows: .padded) {
             Section {
-                TextField("Branch", text: branchInput)
+                TextField(L.Sync.branch, text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
                     .autocorrectionDisabled()
             } header: {
-                Text("Branch")
+                Text(L.Sync.branch)
             } footer: {
-                Text("A new branch off \(baseBranch). Reusing an existing name adds to its pull request.")
+                Text(L.Sync.aNewBranchOffReusing(baseBranch))
             }
             Section {
-                TextField("Message", text: commitMessageInput)
+                TextField(L.Sync.message, text: commitMessageInput)
             } header: {
-                Text("Commit")
+                Text(L.Sync.commit)
             } footer: {
-                Text("\(fileCount) article\(fileCount == 1 ? "" : "s") will be committed.")
+                Text(L.Sync.articleWillBeCommitted(fileCount))
             }
             Section {
-                TextField("Title", text: prTitleInput)
-                TextField("Description", text: prBodyInput, axis: .vertical)
+                TextField(L.Common.title, text: prTitleInput)
+                TextField(L.Sync.description, text: prBodyInput, axis: .vertical)
                     .lineLimit(3...8)
             } header: {
-                Text("Pull Request")
+                Text(L.Sync.pullRequest)
             } footer: {
-                Text("Opened against \(baseBranch).")
+                Text(L.Sync.openedAgainst(baseBranch))
             }
         }
-        .navigationTitle("Push to GitHub")
+        .navigationTitle(L.Sync.pushToGithub)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel", action: onCancel)
+                Button(L.Common.cancel, action: onCancel)
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(action: onConfirm) {
                     if isPushing {
                         ProgressView()
                     } else {
-                        Text("Push")
+                        Text(L.Sync.push)
                     }
                 }
                 .disabled(isPushing || branchInput.wrappedValue.isEmpty)

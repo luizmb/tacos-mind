@@ -1,3 +1,4 @@
+import Localization
 import AppDomain
 import SwiftRex
 import SwiftRexArchitecture
@@ -91,7 +92,7 @@ public struct AppRootView: View, @MainActor Routable {
                     Button {
                         viewStore.dispatch(.navigation(.presentGitHubSync))
                     } label: {
-                        Label("GitHub Sync", systemImage: "arrow.triangle.2.circlepath")
+                        Label(L.Common.githubSync, systemImage: "arrow.triangle.2.circlepath")
                     }
                 }
             }
@@ -126,17 +127,17 @@ private struct SharedPresentations: ViewModifier {
             // reason travels through `presenting:` so the message cannot blank out from
             // under the dialog as the state that raised it goes away.
             .confirmationDialog(
-                "Unsaved changes",
+                L.App.unsavedChanges,
                 isPresented: viewStore.binding(.state(\.discardPrompt).action(review: { (_: Void) in .navigation(.cancelPending) })),
                 titleVisibility: .visible,
                 presenting: viewStore.state.discardPrompt.value
             ) { _ in
-                Button("Discard and Open", role: .destructive) {
+                Button(L.App.discardAndOpen, role: .destructive) {
                     viewStore.dispatch(.navigation(.resumePending))
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(L.Common.cancel, role: .cancel) {}
             } message: { problem in
-                Text(problem.message)
+                Text(joining: problem.message)
             }
     }
 }
