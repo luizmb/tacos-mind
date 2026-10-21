@@ -87,7 +87,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/luizmb/Vitral.git",
       "state" : {
-        "revision" : "645ca774832bcaaacc93f5c33f22c2b873a32144",
+        "revision" : "84231cfe2970fb1b7f94170479eeb4d6a4e3c534",
         "version" : "0.5.0"
       }
     }
