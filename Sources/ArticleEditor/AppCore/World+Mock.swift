@@ -54,10 +54,20 @@ extension World {
         },
         performPush: @escaping @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError> = {
             _, _, _ in .just(.nothingToPush)
+        },
+        deviceTraits: @escaping @Sendable () -> Publisher<DeviceTraits, Never> = { .empty() },
+        appPhases: @escaping @Sendable () -> Publisher<AppPhase, Never> = { .empty() },
+        newID: @escaping @Sendable () -> UUID = { UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x42)) },
+        formatPublicationDate: @escaping @Sendable (PublicationDate) -> String = { date in
+            String(format: "%04d-%02d-%02d", date.year, date.month, date.day)
         }
     ) -> World {
         World(
             currentDate: currentDate,
+            deviceTraits: deviceTraits,
+            appPhases: appPhases,
+            newID: newID,
+            formatPublicationDate: formatPublicationDate,
             articlesDirectory: articlesDirectory,
             repositoryRoot: repositoryRoot,
             decoder: decoder,

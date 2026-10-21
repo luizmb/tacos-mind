@@ -16,7 +16,7 @@ public struct EditBranchContent: View {
     public var body: some View {
         GlassList(backdrop: .grid(), rows: .padded) {
             Section {
-                TextField(L.Sync.baseBranch, text: branchInput)
+                FieldText(L.Sync.baseBranch, text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif

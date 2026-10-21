@@ -9,6 +9,16 @@ import ReactiveConcurrency
 /// same convention PookiePayslip uses (a struct of closures, not a protocol).
 public struct World: Sendable {
     public var currentDate: @Sendable () -> Date
+    /// The screen's traits (appearance, width class), seeded on subscribe and followed: the app
+    /// keeps them in state, and views get what their projection makes of them, never by asking.
+    public var deviceTraits: @Sendable () -> Publisher<DeviceTraits, Never>
+    /// The app's life (in front, half there, gone), seeded on subscribe.
+    public var appPhases: @Sendable () -> Publisher<AppPhase, Never>
+    /// A fresh identity, for something the app makes (a block added to an article).
+    public var newID: @Sendable () -> UUID
+    /// A publication date as the person reads it, in their locale. Applied where the view state
+    /// is made; the locale itself stays here, in the world.
+    public var formatPublicationDate: @Sendable (PublicationDate) -> String
     public var articlesDirectory: @Sendable () -> URL
     public var repositoryRoot: @Sendable () -> URL
     /// Injected rather than constructing `JSONDecoder()`/`JSONEncoder()` ad hoc where
@@ -102,6 +112,10 @@ public struct World: Sendable {
 
     public init(
         currentDate: @escaping @Sendable () -> Date,
+        deviceTraits: @escaping @Sendable () -> Publisher<DeviceTraits, Never>,
+        appPhases: @escaping @Sendable () -> Publisher<AppPhase, Never>,
+        newID: @escaping @Sendable () -> UUID,
+        formatPublicationDate: @escaping @Sendable (PublicationDate) -> String,
         articlesDirectory: @escaping @Sendable () -> URL,
         repositoryRoot: @escaping @Sendable () -> URL,
         decoder: any DataDecoderFactory & Sendable,
@@ -133,6 +147,10 @@ public struct World: Sendable {
         performPush: @escaping @Sendable (GitHubSettings, PushRequest, PushPreview) -> Publisher<PushOutcome, GitHubError>
     ) {
         self.currentDate = currentDate
+        self.deviceTraits = deviceTraits
+        self.appPhases = appPhases
+        self.newID = newID
+        self.formatPublicationDate = formatPublicationDate
         self.articlesDirectory = articlesDirectory
         self.repositoryRoot = repositoryRoot
         self.decoder = decoder

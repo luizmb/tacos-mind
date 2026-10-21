@@ -4,6 +4,7 @@ import SwiftRex
 import SwiftRexArchitecture
 import SwiftRexSwiftUI
 import SwiftUI
+import Vitral
 
 /// The app shell.
 ///
@@ -27,25 +28,39 @@ public struct AppRootView: View, @MainActor Routable {
     let world: World
     /// Made from the view store each render: a plain value, cheap, and holding no state.
     public var router: AppRouter { AppRouter(viewStore: viewStore, world: world) }
-    #if !os(macOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    #endif
+    /// What the shell is laid out and drawn in, made from the state's traits by the projection
+    /// below. Its own store, so a trait change wakes the shell and nothing else.
+    @OwnedStore var shell: ViewStore<AppAction, ShellState>
 
     init(store: any StoreType<AppAction, AppState>, world: World) {
         _viewStore = OwnedStore(wrappedValue: store.viewStore())
+        _shell = OwnedStore(
+            wrappedValue: store
+                .projection(action: { (action: AppAction) in action }, state: ShellState.init)
+                .buffer()
+                .viewStore()
+        )
         self.world = world
     }
 
     public var body: some View {
-        #if os(macOS)
-        splitLayout
-        #else
-        if horizontalSizeClass == .compact {
-            compactLayout
-        } else {
+        // Read into locals first, so the dependencies register while the body is being tracked.
+        let isCompact = shell.state.isCompact.value
+        let scheme = shell.state.scheme.value
+        return Group {
+            #if os(macOS)
             splitLayout
+            #else
+            if isCompact {
+                compactLayout
+            } else {
+                splitLayout
+            }
+            #endif
         }
-        #endif
+        // The scheme everything below is drawn in, Vitral's tokens and SwiftUI's own controls
+        // alike, from the state.
+        .scheme(scheme)
     }
 
     /// Both panes always visible — macOS, and iPad in regular width. No "push" concept:
@@ -197,5 +212,17 @@ extension ViewStore where Action == AppAction, State == AppState {
             get: { state[dynamicMember: slot].value.isPresented },
             set: { isUp in if !isUp { dispatch(dismiss) } }
         )
+    }
+}
+
+/// What the shell reads, and nothing else: the answers its projection makes of the state's traits.
+struct ShellState: Equatable {
+    /// One stack rather than two columns.
+    var isCompact: Bool
+    var scheme: ColorScheme
+
+    init(_ state: AppState) {
+        isCompact = state.traits.isCompactWidth
+        scheme = state.traits.isDark ? .dark : .light
     }
 }
