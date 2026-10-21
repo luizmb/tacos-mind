@@ -18,6 +18,9 @@ public struct ArticleEditorContent: View {
     let draft: Binding<Bool>
     let number: Binding<Int>
     let published: Binding<PublicationDate?>
+    let isPickingPublished: Binding<Bool>
+    /// The publication date as it reads, written by the world.
+    let publishedText: String
     let tags: [GeneratorCore.Tag]
     let allTags: [GeneratorCore.Tag]
     let brainstorming: Binding<String>
@@ -177,14 +180,15 @@ public struct ArticleEditorContent: View {
                     isLinkAware: false
                 )
             }
-            TextField(L.Editor.slug, text: slug)
-            TextField(L.Editor.author, text: author)
-            Picker(L.Editor.emphasis, selection: emphasis) {
-                Text(L.Editor.text).tag(Emphasis.text)
-                Text(L.Editor.video).tag(Emphasis.video)
-            }
-            Toggle(L.Editor.draft, isOn: draft)
-            Stepper(L.Editor.number(number.wrappedValue), value: number, in: 0...999)
+            FieldText(L.Editor.slug, text: slug)
+            FieldText(L.Editor.author, text: author)
+            SegmentedControlGlass(selection: emphasis, options: [
+                ChoiceOption(Emphasis.text, title: L.Editor.text),
+                ChoiceOption(Emphasis.video, title: L.Editor.video),
+            ])
+            .accessibilityLabel(Text(L.Editor.emphasis))
+            ToggleSwitch(L.Editor.draft, isOn: draft)
+            FieldStepper(L.Editor.number(number.wrappedValue), value: number, in: 0...999)
             publishedField
         }
     }
@@ -197,18 +201,17 @@ public struct ArticleEditorContent: View {
             }
         )
         return VStack(alignment: .leading) {
-            Toggle(L.Editor.published, isOn: isPublished)
+            ToggleSwitch(L.Editor.published, isOn: isPublished)
             if published.wrappedValue != nil {
-                DatePicker(
+                FieldDate(
                     L.Editor.date,
-                    selection: Binding<Date>(
+                    date: Binding<Date>(
                         get: { (published.wrappedValue ?? todayPublicationDate()).asDate },
                         set: { published.wrappedValue = PublicationDate(date: $0) }
                     ),
-                    displayedComponents: .date
+                    format: { _ in Text(verbatim: publishedText) },
+                    isPicking: isPickingPublished
                 )
-                .datePickerStyle(.compact)
-                .labelsHidden()
             }
         }
     }
@@ -390,14 +393,14 @@ private struct BlockRow: View {
     private var content: some View {
         switch block.block {
         case .heading(let level, let text):
-            Picker(L.Editor.level, selection: Binding(
-                get: { level },
-                set: { onUpdate(.heading(level: $0, text: text)) }
-            )) {
-                Text(L.Editor.section).tag(HeadingLevel.section)
-                Text(L.Editor.subsection).tag(HeadingLevel.subsection)
-            }
-            .pickerStyle(.segmented)
+            SegmentedControlGlass(
+                selection: Binding(get: { level }, set: { onUpdate(.heading(level: $0, text: text)) }),
+                options: [
+                    ChoiceOption(HeadingLevel.section, title: L.Editor.section),
+                    ChoiceOption(HeadingLevel.subsection, title: L.Editor.subsection),
+                ]
+            )
+            .accessibilityLabel(Text(L.Editor.level))
             PasteAwareTextEditor(
                 text: Binding(
                     get: { text },
@@ -432,29 +435,26 @@ private struct BlockRow: View {
                 .font(SiteTypography.body)
             }
             HStack {
-                Button(L.Editor.addItem) { onUpdate(.list(items: items + [""], bullet: bullet)) }
+                ButtonSecondary(L.Editor.addItem, size: .small) { onUpdate(.list(items: items + [""], bullet: bullet)) }
                 if items.count > 1 {
-                    Button(L.Editor.removeLast) { onUpdate(.list(items: Array(items.dropLast()), bullet: bullet)) }
+                    ButtonSecondary(L.Editor.removeLast, size: .small) { onUpdate(.list(items: Array(items.dropLast()), bullet: bullet)) }
                 }
             }
-            .font(.caption)
-            TextField(L.Editor.bulletOptionalEG, text: Binding(
+            FieldText(L.Editor.bulletOptionalEG, text: Binding(
                 get: { bullet ?? "" },
                 set: { onUpdate(.list(items: items, bullet: $0.isEmpty ? nil : $0)) }
             ))
 
         case .image(let url, let altText):
-            TextField(L.Editor.url, text: Binding(get: { url }, set: { onUpdate(.image(url: $0, altText: altText)) }))
-            TextField(L.Editor.altText, text: Binding(get: { altText }, set: { onUpdate(.image(url: url, altText: $0)) }))
+            FieldText(L.Editor.url, text: Binding(get: { url }, set: { onUpdate(.image(url: $0, altText: altText)) }))
+            FieldText(L.Editor.altText, text: Binding(get: { altText }, set: { onUpdate(.image(url: url, altText: $0)) }))
 
         case .video(let url, let caption):
-            TextField(L.Editor.url, text: Binding(get: { url }, set: { onUpdate(.video(url: $0, caption: caption)) }))
-            TextField(L.Editor.captionOptional, text: Binding(
+            FieldText(L.Editor.url, text: Binding(get: { url }, set: { onUpdate(.video(url: $0, caption: caption)) }))
+            FieldText(L.Editor.captionOptional, text: Binding(
                 get: { caption ?? "" },
                 set: { onUpdate(.video(url: url, caption: $0.isEmpty ? nil : $0)) }
             ))
-            .font(SiteTypography.caption)
-            .foregroundStyle(.secondary)
 
         case .code(let language, let source):
             PasteAwareTextEditor(

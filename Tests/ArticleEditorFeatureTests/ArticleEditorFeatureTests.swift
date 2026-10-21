@@ -66,7 +66,9 @@ struct ArticleEditorFeatureTests {
                 listArticles: listArticles,
                 generateArticle: generateArticle,
                 generateAllArticles: generateAllArticles,
-                openInBrowser: openInBrowser
+                openInBrowser: openInBrowser,
+                newID: { UUID(uuid: (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x42)) },
+                formatPublicationDate: { date in "\(date.year)-\(date.month)-\(date.day)" }
             )
         )
     }
@@ -88,8 +90,7 @@ struct ArticleEditorFeatureTests {
                         Issue.record("expected a successful open")
                         return
                     }
-                    state.document = OpenDocument(url: openedURL, article: opened.article)
-                    state.document?.blocks = zip(opened.blockIDs, opened.article.blocks).map { EditableBlock(id: $0, block: $1) }
+                    state.document = OpenDocument(url: openedURL, article: opened.article, blockIDs: opened.blockIDs)
                 }
                 await store.runEffects()
             } else {
@@ -203,7 +204,7 @@ struct ArticleEditorFeatureTests {
         let target = summary(slug: "pure-functions")
         // Renamed in the form but not yet written — the state a Save starts from.
         var editor = ArticleEditorFeature.State(opening: target)
-        var document = OpenDocument(url: target.url, article: article(slug: "pure-functions"))
+        var document = OpenDocument(url: target.url, article: article(slug: "pure-functions"), blockIDs: [])
         document.title = "Renamed"
         document.slug = "renamed"
         editor.document = document

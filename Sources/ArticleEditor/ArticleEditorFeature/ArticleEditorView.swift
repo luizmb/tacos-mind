@@ -19,6 +19,8 @@ public struct ArticleEditorView: View {
             draft: viewStore.binding(.state(\.draft).action(\.setDraft)),
             number: viewStore.binding(.state(\.number).action(\.setNumber)),
             published: viewStore.binding(.state(\.published).action(\.setPublished)),
+            isPickingPublished: viewStore.binding(.state(\.isPickingPublished).action(\.setPickingPublished)),
+            publishedText: viewStore.state.publishedText.value,
             tags: viewStore.state.tags.value,
             allTags: viewStore.state.allTags.value,
             brainstorming: viewStore.binding(.state(\.brainstorming).action(\.setBrainstorming)),

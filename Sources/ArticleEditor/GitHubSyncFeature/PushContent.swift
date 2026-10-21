@@ -22,7 +22,7 @@ public struct PushContent: View {
     public var body: some View {
         GlassList(backdrop: .grid(), rows: .padded) {
             Section {
-                TextField(L.Sync.branch, text: branchInput)
+                FieldText(L.Sync.branch, text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
@@ -33,15 +33,15 @@ public struct PushContent: View {
                 Text(L.Sync.aNewBranchOffReusing(baseBranch))
             }
             Section {
-                TextField(L.Sync.message, text: commitMessageInput)
+                FieldText(L.Sync.message, text: commitMessageInput)
             } header: {
                 Text(L.Sync.commit)
             } footer: {
                 Text(L.Sync.articleWillBeCommitted(fileCount))
             }
             Section {
-                TextField(L.Common.title, text: prTitleInput)
-                TextField(L.Sync.description, text: prBodyInput, axis: .vertical)
+                FieldText(L.Common.title, text: prTitleInput)
+                FieldText(L.Sync.description, text: prBodyInput, axis: .vertical)
                     .lineLimit(3...8)
             } header: {
                 Text(L.Sync.pullRequest)

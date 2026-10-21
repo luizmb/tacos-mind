@@ -38,6 +38,7 @@ public enum L {
         public static var saveToNotes: LocalizedStringKey { "Save to Notes" }
         public static var saveToNotesAndClose: LocalizedStringKey { "Save to Notes and Close" }
         public static var saySomething: LocalizedStringKey { "Say something…" }
+        public static var send: LocalizedStringKey { "Send" }
         public static var speechNotAvailable: LocalizedStringKey { "Speech recognition isn't available right now." }
         public static var stopListening: LocalizedStringKey { "Stop listening" }
         public static var theOnDeviceAssistantIsnt: LocalizedStringKey { "The on-device assistant isn't available on this device." }
@@ -211,6 +212,7 @@ public enum L {
             public static var saveToNotes: LocalizedStringResource { "Save to Notes" }
             public static var saveToNotesAndClose: LocalizedStringResource { "Save to Notes and Close" }
             public static var saySomething: LocalizedStringResource { "Say something…" }
+            public static var send: LocalizedStringResource { "Send" }
             public static var speechNotAvailable: LocalizedStringResource { "Speech recognition isn't available right now." }
             public static var stopListening: LocalizedStringResource { "Stop listening" }
             public static var theOnDeviceAssistantIsnt: LocalizedStringResource { "The on-device assistant isn't available on this device." }

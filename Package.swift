@@ -4,7 +4,7 @@ import PackageDescription
 // Vitral's SwiftUI components exist only on Apple platforms; elsewhere (the Linux build of Meow)
 // the package is left out altogether, so its missing product isn't looked for.
 #if canImport(Darwin)
-let vitralPackage: [Package.Dependency] = [.package(url: "https://github.com/luizmb/Vitral.git", from: "0.2.8")]
+let vitralPackage: [Package.Dependency] = [.package(url: "https://github.com/luizmb/Vitral.git", from: "0.5.0")]
 let vitral: [Target.Dependency] = [
     .product(name: "Vitral", package: "Vitral"),
     .product(name: "VitralTokens", package: "Vitral"),
@@ -25,7 +25,7 @@ let package = Package(
         .package(url: "https://github.com/luizmb/Hourglass.git", from: "1.0.1"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.1"),
         .package(url: "https://github.com/SwiftRex/SwiftRex.git", branch: "main", traits: ["ReactiveConcurrency"]),
-        .package(url: "https://github.com/luizmb/ReactiveConcurrency.git", from: "2.0.0"),
+        .package(path: "../../libraries/ReactiveConcurrency"),
         .package(url: "https://github.com/luizmb/NetworkTools.git", from: "0.9.0"),
     ] + vitralPackage,
     targets: [
@@ -186,6 +186,7 @@ let package = Package(
                 "AIChatFeature",
                 "GitHubSyncFeature",
                 "GeneratorCore",
+                .product(name: "DataStructure", package: "FP"),
                 .product(name: "SwiftRex", package: "SwiftRex"),
                 .product(name: "SwiftRex.SwiftUI", package: "SwiftRex"),
                 .product(name: "SwiftRex.Architecture", package: "SwiftRex"),

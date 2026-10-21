@@ -1,5 +1,5 @@
 {
-  "originHash" : "5dcb069fa8e13e2351f6b3ef4e044644992b55ed95643ed5b215bcc5a78da84c",
+  "originHash" : "36df2bf1e10e02966700490b856c7dee4a830b3e8b4360c1703f668a7c9ef886",
   "pins" : [
     {
       "identity" : "fp",
@@ -26,15 +26,6 @@
       "state" : {
         "revision" : "42fcce8f963999628671a2f5499c6049bf5b0196",
         "version" : "0.9.0"
-      }
-    },
-    {
-      "identity" : "reactiveconcurrency",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/luizmb/ReactiveConcurrency.git",
-      "state" : {
-        "revision" : "d417be0d55ecd2c737c90d6cd2e32d360bd84309",
-        "version" : "2.0.0"
       }
     },
     {
@@ -96,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/luizmb/Vitral.git",
       "state" : {
-        "revision" : "98a6e0858a8ff48fff598c8712a4ae8bfc76d198",
-        "version" : "0.2.8"
+        "revision" : "645ca774832bcaaacc93f5c33f22c2b873a32144",
+        "version" : "0.5.0"
       }
     }
   ],

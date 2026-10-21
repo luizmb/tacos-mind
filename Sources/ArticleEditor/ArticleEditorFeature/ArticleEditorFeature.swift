@@ -32,6 +32,9 @@ public enum ArticleEditorFeature {
         /// `true` while the "revert all unsaved changes?" confirmation is up — store
         /// state, not local SwiftUI `@State`, same convention as every other prompt here.
         public var isConfirmingRevert: Bool
+        /// Whether the publication date's calendar is open: the screen's state, like every other
+        /// prompt here.
+        public var isPickingPublished: Bool
 
         /// A fresh screen for `summary` — the file itself loads on `.start`. Seeding is
         /// construction, so there is no partly-filled editor for a caller to finish
@@ -45,6 +48,7 @@ public enum ArticleEditorFeature {
             isBuilding = false
             buildStatus = nil
             isConfirmingRevert = false
+            isPickingPublished = false
         }
     }
 
@@ -78,10 +82,13 @@ public enum ArticleEditorFeature {
         case setDraft(Bool)
         case setNumber(Int)
         case setPublished(PublicationDate?)
+        case setPickingPublished(Bool)
         case toggleTag(Tag)
         case setBrainstorming(String)
 
         case addBlock(ContentBlockKind, at: Int)
+        /// The block asked for, with the identity the world gave it.
+        case blockAdded(UUID, ContentBlockKind, at: Int)
         case removeBlock(UUID)
         case moveBlocks(IndexSet, Int)
         case updateBlock(UUID, ContentBlock)
@@ -136,6 +143,9 @@ public enum ArticleEditorFeature {
         public let generateArticle: @Sendable (String) -> Publisher<URL, ArticleEditorError>
         public let generateAllArticles: @Sendable () -> Publisher<Void, ArticleEditorError>
         public let openInBrowser: @MainActor @Sendable (URL) -> Void
+        public let newID: @Sendable () -> UUID
+        /// A publication date as it reads, applied by the view state projection.
+        public let formatPublicationDate: @Sendable (PublicationDate) -> String
 
         public init(
             openDocument: @escaping @Sendable (URL) -> Publisher<(article: Article, blockIDs: [UUID]), ArticleEditorError>,
@@ -146,7 +156,9 @@ public enum ArticleEditorFeature {
             listArticles: @escaping @Sendable () -> Publisher<[ArticleSummary], ArticleEditorError>,
             generateArticle: @escaping @Sendable (String) -> Publisher<URL, ArticleEditorError>,
             generateAllArticles: @escaping @Sendable () -> Publisher<Void, ArticleEditorError>,
-            openInBrowser: @escaping @MainActor @Sendable (URL) -> Void
+            openInBrowser: @escaping @MainActor @Sendable (URL) -> Void,
+            newID: @escaping @Sendable () -> UUID,
+            formatPublicationDate: @escaping @Sendable (PublicationDate) -> String
         ) {
             self.openDocument = openDocument
             self.saveDocument = saveDocument
@@ -157,6 +169,8 @@ public enum ArticleEditorFeature {
             self.generateArticle = generateArticle
             self.generateAllArticles = generateAllArticles
             self.openInBrowser = openInBrowser
+            self.newID = newID
+            self.formatPublicationDate = formatPublicationDate
         }
     }
 
@@ -184,6 +198,9 @@ public enum ArticleEditorFeature {
         public var allSummaries: [ArticleSummary]
         public var isBuilding: Bool
         public var buildStatus: LocalizedStringResource?
+        public var isPickingPublished: Bool
+        /// The publication date as it reads, written by the world.
+        public var publishedText: String
     }
 
     @Prisms
@@ -195,6 +212,7 @@ public enum ArticleEditorFeature {
         case setDraft(Bool)
         case setNumber(Int)
         case setPublished(PublicationDate?)
+        case setPickingPublished(Bool)
         case toggleTag(Tag)
         case setBrainstorming(String)
         case addBlock(ContentBlockKind, at: Int)
@@ -214,7 +232,7 @@ public enum ArticleEditorFeature {
         case openChat
     }
 
-    public static let mapState = Reader<Environment, @MainActor @Sendable (State) -> ViewState> { _ in
+    public static let mapState = Reader<Environment, @MainActor @Sendable (State) -> ViewState> { environment in
         { state in
             ViewState(
                 isDocumentOpen: state.document != nil,
@@ -239,7 +257,9 @@ public enum ArticleEditorFeature {
                 conflict: state.document?.externalChange ?? .none,
                 allSummaries: state.allSummaries,
                 isBuilding: state.isBuilding,
-                buildStatus: state.buildStatus
+                buildStatus: state.buildStatus,
+                isPickingPublished: state.isPickingPublished,
+                publishedText: state.document?.published.map(environment.formatPublicationDate) ?? ""
             )
         }
     }
@@ -254,6 +274,7 @@ public enum ArticleEditorFeature {
             case .setDraft(let value): .setDraft(value)
             case .setNumber(let value): .setNumber(value)
             case .setPublished(let value): .setPublished(value)
+            case .setPickingPublished(let value): .setPickingPublished(value)
             case .toggleTag(let tag): .toggleTag(tag)
             case .setBrainstorming(let value): .setBrainstorming(value)
             case .addBlock(let kind, let index): .addBlock(kind, at: index)
@@ -302,9 +323,7 @@ public enum ArticleEditorFeature {
             case .opened(let url, .success(let result)):
                 guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { state in
-                    var document = OpenDocument(url: url, article: result.article)
-                    document.blocks = zip(result.blockIDs, result.article.blocks).map { EditableBlock(id: $0, block: $1) }
-                    state.document = document
+                    state.document = OpenDocument(url: url, article: result.article, blockIDs: result.blockIDs)
                 }
                 .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
 
@@ -361,6 +380,9 @@ public enum ArticleEditorFeature {
                 return .reduce { state in Self.applyStructuralEdit(&state) { $0.published = value } }
                     .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
 
+            case .setPickingPublished(let value):
+                return .reduce { $0.isPickingPublished = value }
+
             case .toggleTag(let tag):
                 return .reduce { state in
                     Self.applyStructuralEdit(&state) { document in
@@ -374,9 +396,12 @@ public enum ArticleEditorFeature {
                 .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
 
             case .addBlock(let kind, let index):
+                return .produce { ctx in Self.immediateDispatch(.blockAdded(ctx.environment.newID(), kind, at: index)) }
+
+            case .blockAdded(let id, let kind, let index):
                 return .reduce { state in
                     Self.applyStructuralEdit(&state) { document in
-                        document.blocks.insert(EditableBlock(id: UUID(), block: kind.makeDefault()), at: index)
+                        document.blocks.insert(EditableBlock(id: id, block: kind.makeDefault()), at: index)
                     }
                 }
                 .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
@@ -499,8 +524,7 @@ public enum ArticleEditorFeature {
                 guard context.stateBefore?.opened.url == url else { return .doNothing }
                 return .reduce { state in
                     state.opened = state.opened.reflecting(result.article)
-                    state.document = OpenDocument(url: url, article: result.article)
-                    state.document?.blocks = zip(result.blockIDs, result.article.blocks).map { EditableBlock(id: $0, block: $1) }
+                    state.document = OpenDocument(url: url, article: result.article, blockIDs: result.blockIDs)
                 }
                 .produce { _ in Effect<Action>.cancel(id: Self.undoCheckpointCommitID) }
 
@@ -641,5 +665,14 @@ extension ArticleEditorError {
         case .fileWriteFailed(let path, let reason): L.Resource.Common.couldNotWrite(path, reason)
         case .parseFailed(let path, let reason): L.Resource.Common.couldNotParse(path, reason)
         }
+    }
+}
+
+extension ArticleEditorFeature {
+    /// An action dispatched straight back, from an effect: how a decision that needs something
+    /// from the world (a new block's identity) gets it and lands as an ordinary action.
+    fileprivate static func immediateDispatch(_ action: Action) -> Effect<Action> {
+        let transform: @Sendable (()) -> Action = const(action)
+        return Publisher<Void, Never>.just(()).asEffect(transform)
     }
 }

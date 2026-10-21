@@ -22,7 +22,7 @@ public struct LinkRepositoryContent: View {
     public var body: some View {
         GlassList(backdrop: .grid(), rows: .padded) {
             Section(L.Sync.repository) {
-                TextField(L.Sync.ownerRepo, text: repoInput)
+                FieldText(L.Sync.ownerRepo, text: repoInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
@@ -32,7 +32,7 @@ public struct LinkRepositoryContent: View {
                 .foregroundStyle(.secondary)
             }
             Section {
-                TextField(L.Sync.baseBranch, text: branchInput)
+                FieldText(L.Sync.baseBranch, text: branchInput)
                     #if os(iOS)
                     .textInputAutocapitalization(.never)
                     #endif
@@ -43,7 +43,7 @@ public struct LinkRepositoryContent: View {
                 Text(L.Sync.pullReadsNothingCommitted)
             }
             Section(L.Sync.personalAccessToken) {
-                SecureField(L.Sync.token, text: tokenInput)
+                FieldSecure(L.Sync.token, text: tokenInput)
                 Link(L.Sync.createATokenOnGithub, destination: Self.tokenCreationURL)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L.Sync.onThatPageFillIn)
