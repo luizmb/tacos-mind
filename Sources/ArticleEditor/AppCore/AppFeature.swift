@@ -59,6 +59,10 @@ public enum AppFeature {
 
         public var quitConfirmation: QuitConfirmationState
 
+        /// The screen's traits as the world last reported them. Read by the root's projection
+        /// (one stack or two columns, light or dark); no view asks the device.
+        public var traits: DeviceTraits = .initial
+
         public init() {
             articleList = ArticleListFeature.initialState(with: ())
             path = []
@@ -84,6 +88,10 @@ public enum AppFeature {
         case quitRequested
         case quitAlertResolved(QuitAlertChoice)
         case terminationOutcomeReady(Bool)
+        /// The screen's traits changed (appearance, width class), as the world reports them.
+        case traitsChanged(DeviceTraits)
+        /// The app moved in its life, as the world reports it.
+        case phaseChanged(AppPhase)
     }
 
     // MARK: - Environment
@@ -162,6 +170,7 @@ public enum AppFeature {
         <> chatContextSyncBehavior()
         <> articleIndexSyncBehavior()
         <> quitBehavior()
+        <> deviceBehavior()
     }
 }
 
@@ -326,6 +335,30 @@ private func articleIndexSyncBehavior() -> Behavior<AppAction, AppState, World> 
 // `.terminationOutcomeReady`, so `World.completeTermination` (which calls back into
 // AppKit) is invoked from exactly one place, regardless of how the user answered.
 
+/// The screen's traits and the app's life, watched for as long as the app runs. iOS gives an app
+/// no way to block termination, so going to the background is the one real protection there is:
+/// it is reported to the editor, whose own reducer decides whether there is anything to save.
+private func deviceBehavior() -> Behavior<AppAction, AppState, World> {
+    Behavior<AppAction, AppState, World>.supervise { _ in
+        Supervision { world in
+            [
+                world.deviceTraits().asChannel(id: "device-traits", AppAction.traitsChanged),
+                world.appPhases().asChannel(id: "app-phase", AppAction.phaseChanged),
+            ]
+        }
+    }
+    <> Behavior<AppAction, AppState, World>.handle { action, _ in
+        switch action {
+        case .traitsChanged(let traits):
+            .reduce { $0.traits = traits }
+        case .phaseChanged(.background):
+            .produce { _ in AppAction.immediateDispatch(.articleEditor(.appDidEnterBackground)) }
+        default:
+            .doNothing
+        }
+    }
+}
+
 private func quitBehavior() -> Behavior<AppAction, AppState, World> {
     Behavior<AppAction, AppState, World>.handle { action, context in
         switch action {
@@ -439,7 +472,9 @@ public enum AppScopes: Rig {
                 listArticles: world.listArticles,
                 generateArticle: world.generateArticle,
                 generateAllArticles: world.generateAllArticles,
-                openInBrowser: world.openInBrowser
+                openInBrowser: world.openInBrowser,
+                newID: world.newID,
+                formatPublicationDate: world.formatPublicationDate
             )
         }
 

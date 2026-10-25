@@ -37,7 +37,9 @@ public struct OpenDocument: Equatable, Sendable {
     /// `ArticleEditorFeature.flushPendingUndoCheckpoint`). `nil` when no burst is in flight.
     public var pendingUndoCheckpoint: Article?
 
-    public init(url: URL, article: Article) {
+    /// - Parameter blockIDs: each block's identity, from the world; a block without one (the
+    ///   list shorter than the article's) is given its position's.
+    public init(url: URL, article: Article, blockIDs: [UUID]) {
         self.url = url
         title = article.title
         slug = article.slug
@@ -47,7 +49,9 @@ public struct OpenDocument: Equatable, Sendable {
         number = article.number
         published = article.published
         tags = article.tags
-        blocks = article.blocks.map { EditableBlock(id: UUID(), block: $0) }
+        blocks = article.blocks.enumerated().map { index, block in
+            EditableBlock(id: blockIDs.indices.contains(index) ? blockIDs[index] : .block(at: index), block: block)
+        }
         brainstorming = article.brainstorming
         originalSnapshot = article
         lastWrittenHash = nil
@@ -76,8 +80,9 @@ public struct OpenDocument: Equatable, Sendable {
         currentArticle != originalSnapshot
     }
 
-    /// Overwrites every editable field from `article` (fresh block identities — undo/redo
-    /// and revert aren't expected to preserve row identity across a full-content swap),
+    /// Overwrites every editable field from `article` (block identities by position — undo/redo
+    /// and revert aren't expected to preserve row identity across a full-content swap, and a
+    /// position is an identity that needs nothing from outside),
     /// leaving `originalSnapshot`/`lastWrittenHash`/`externalChange` untouched. Shared by
     /// undo, redo, and "Revert Changes" (which restores from `originalSnapshot`).
     public mutating func applyEditableFields(from article: Article) {
@@ -89,7 +94,7 @@ public struct OpenDocument: Equatable, Sendable {
         number = article.number
         published = article.published
         tags = article.tags
-        blocks = article.blocks.map { EditableBlock(id: UUID(), block: $0) }
+        blocks = article.blocks.enumerated().map { index, block in EditableBlock(id: .block(at: index), block: block) }
         brainstorming = article.brainstorming
     }
 }
@@ -97,4 +102,19 @@ public struct OpenDocument: Equatable, Sendable {
 public enum ExternalChangeState: Equatable, Sendable {
     case none
     case conflict(diskArticle: Article)
+}
+
+private extension UUID {
+    /// A block's identity made from its position: unique within a document, the same for the
+    /// same position every time, and made from bytes rather than minted.
+    static func block(at index: Int) -> UUID {
+        let n = UInt64(clamping: index)
+        return UUID(uuid: (
+            0, 0, 0, 0, 0, 0, 0, 0,
+            UInt8(truncatingIfNeeded: n >> 56), UInt8(truncatingIfNeeded: n >> 48),
+            UInt8(truncatingIfNeeded: n >> 40), UInt8(truncatingIfNeeded: n >> 32),
+            UInt8(truncatingIfNeeded: n >> 24), UInt8(truncatingIfNeeded: n >> 16),
+            UInt8(truncatingIfNeeded: n >> 8), UInt8(truncatingIfNeeded: n)
+        ))
+    }
 }

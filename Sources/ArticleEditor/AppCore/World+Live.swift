@@ -7,6 +7,7 @@ import FileWatching
 // synchronously within one `convert()` call), but the compiler can't verify that itself.
 @preconcurrency import AVFoundation
 import Core
+import DataStructure
 import CoreMedia
 import CryptoKit
 import Foundation
@@ -104,9 +105,20 @@ extension World {
         // from the same closure `currentDate` exposes, rather than reaching for `Date()`
         // a second time.
         let now: @Sendable () -> Date = { Date() }
+        // Identities the same way: a `Gen`, run against the World's one generator (the system's
+        // randomness), rather than `UUID()` wherever one is needed.
+        let generator = GenRunner(seed: nil)
+        let ids = Gen<AnyRandomNumberGenerator, UUID>.uuid()
+        let newID: @Sendable () -> UUID = { generator(ids) }
+        // The person's locale, read once here, at the boundary, for everything that needs one.
+        let locale = Locale.autoupdatingCurrent
 
         return World(
             currentDate: now,
+            deviceTraits: makeDeviceTraitsStream,
+            appPhases: makeAppPhaseStream,
+            newID: newID,
+            formatPublicationDate: { date in publicationDateText(date, locale: locale) },
             articlesDirectory: { articlesDir },
             repositoryRoot: { root },
             decoder: jsonDecoder,
@@ -184,7 +196,7 @@ extension World {
                     // No node-identity to preserve across a JSON re-encode (unlike the old
                     // SwiftSyntax splice, nothing here tracks "this block's source range
                     // didn't change") — every block just gets a fresh editor-only UUID.
-                    let blockIDs = article.blocks.map { _ in UUID() }
+                    let blockIDs = article.blocks.map { _ in newID() }
                     continuation.yield((article: article, blockIDs: blockIDs))
                 }
             },
@@ -409,7 +421,7 @@ extension World {
                     // named preset) so finality can be computed precisely below, against
                     // `analyzer.volatileRange`, instead of guessing at what a preset implies.
                     let transcriber = SpeechTranscriber(
-                        locale: Locale.current,
+                        locale: locale,
                         transcriptionOptions: [],
                         reportingOptions: [.volatileResults],
                         attributeOptions: []
@@ -834,4 +846,14 @@ private final class SpeechSynthesisDelegate: NSObject, AVSpeechSynthesizerDelega
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         onFinish()
     }
+}
+
+/// A publication date is a day of the calendar rather than a moment, held in UTC, so it is written
+/// in UTC too: the same day wherever the reader is. In the locale it is given.
+private func publicationDateText(_ date: PublicationDate, locale: Locale) -> String {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC") ?? .gmt
+    return calendar.date(from: DateComponents(year: date.year, month: date.month, day: date.day))
+        .map { $0.formatted(Date.FormatStyle(date: .long, time: .omitted, locale: locale, calendar: calendar, timeZone: calendar.timeZone)) }
+        ?? "\(date.year)-\(date.month)-\(date.day)"
 }

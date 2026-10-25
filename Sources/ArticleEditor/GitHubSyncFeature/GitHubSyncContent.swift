@@ -96,8 +96,8 @@ public struct GitHubSyncContent: View {
     private var repositorySection: some View {
         if isConfigured {
             Section(L.Sync.repository) {
-                LabeledContent(L.Sync.repo, value: repoURL)
-                LabeledContent(L.Sync.baseBranch, value: baseBranch)
+                FieldValue(L.Sync.repo, value: Text(verbatim: repoURL))
+                FieldValue(L.Sync.baseBranch, value: Text(verbatim: baseBranch))
                 Button(L.Sync.editBaseBranch, action: onRequestEditBranch)
                 Button(L.Sync.unlink, role: .destructive, action: onRequestUnlink)
                     .disabled(isUnlinking)

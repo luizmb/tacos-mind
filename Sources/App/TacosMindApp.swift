@@ -34,9 +34,6 @@ struct TacosMindApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
-    #if os(iOS)
-    @Environment(\.scenePhase) private var scenePhase
-    #endif
 
     init() {
         store = MainStore.app(world: world)
@@ -46,16 +43,9 @@ struct TacosMindApp: App {
     }
 
     var body: some Scene {
+        // The app's life and its screen's traits are the world's to report (`World.appPhases`,
+        // `World.deviceTraits`), not this scene's to read; going to the background is handled in
+        // `AppFeature`.
         AppScene.scene(store: store, world: world)
-            #if os(iOS)
-            // iOS gives apps no way to block termination — backgrounding is the closest
-            // signal we get, so it's the only real protection available there. The
-            // decision (save only if there are unsaved changes) lives in
-            // ArticleEditorFeature's own reducer, not here.
-            .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .background else { return }
-                store.dispatch(.articleEditor(.appDidEnterBackground))
-            }
-            #endif
     }
 }

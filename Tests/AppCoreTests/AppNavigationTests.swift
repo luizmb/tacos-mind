@@ -40,7 +40,7 @@ struct AppNavigationTests {
         var editor = ArticleEditorFeature.State(opening: summary)
         var document = OpenDocument(
             url: summary.url,
-            article: Article(title: summary.title, slug: summary.slug, emphasis: .text, blocks: [.paragraph("Body")])
+            article: Article(title: summary.title, slug: summary.slug, emphasis: .text, blocks: [.paragraph("Body")]), blockIDs: []
         )
         document.brainstorming = brainstorming
         editor.document = document

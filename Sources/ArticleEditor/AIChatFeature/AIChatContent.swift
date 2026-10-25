@@ -92,7 +92,7 @@ public struct AIChatContent: View {
     }
 
     private var composer: some View {
-        Composer(L.Chat.saySomething, text: draftText, isEditable: isFieldEditable, isBusy: isResponding) {
+        Composer(L.Chat.saySomething, text: draftText, isEditable: isFieldEditable, isBusy: isResponding, sendLabel: L.Chat.send) {
             Pill(isActive: isListening, action: isFieldEditable ? onToggleListening : nil) {
                 Image(systemName: isListening ? "mic.fill" : "mic")
                     .frame(width: Size.controlSmall, height: Size.controlSmall)

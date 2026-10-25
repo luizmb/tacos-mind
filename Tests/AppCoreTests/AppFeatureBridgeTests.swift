@@ -69,7 +69,7 @@ struct AppFeatureBridgeTests {
         var editor = ArticleEditorFeature.State(opening: summary)
         var document = OpenDocument(
             url: summary.url,
-            article: Article(title: summary.title, slug: summary.slug, emphasis: .text, blocks: [.paragraph("Body")])
+            article: Article(title: summary.title, slug: summary.slug, emphasis: .text, blocks: [.paragraph("Body")]), blockIDs: []
         )
         document.brainstorming = brainstorming
         editor.document = document
@@ -272,7 +272,7 @@ struct AppFeatureBridgeTests {
         var editor = ArticleEditorFeature.State(opening: open)
         var document = OpenDocument(
             url: open.url,
-            article: Article(title: open.title, slug: open.slug, emphasis: .text, number: open.number, blocks: [.paragraph("Body")])
+            article: Article(title: open.title, slug: open.slug, emphasis: .text, number: open.number, blocks: [.paragraph("Body")]), blockIDs: []
         )
         document.slug = "renamed"
         document.title = "Renamed"
