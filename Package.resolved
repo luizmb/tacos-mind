@@ -1,5 +1,5 @@
 {
-  "originHash" : "36df2bf1e10e02966700490b856c7dee4a830b3e8b4360c1703f668a7c9ef886",
+  "originHash" : "b7ece40f7af027902facec1359a1a9b05c398e3315144e385f36e27b19f22c9b",
   "pins" : [
     {
       "identity" : "fp",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "42fcce8f963999628671a2f5499c6049bf5b0196",
         "version" : "0.9.0"
+      }
+    },
+    {
+      "identity" : "reactiveconcurrency",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/luizmb/ReactiveConcurrency.git",
+      "state" : {
+        "revision" : "2afd10d5b4e7d2700589d33047fcfaae66827212",
+        "version" : "2.1.0"
       }
     },
     {
@@ -79,7 +88,7 @@
       "location" : "https://github.com/SwiftRex/SwiftRex.git",
       "state" : {
         "branch" : "main",
-        "revision" : "3700d334862fb401a6a40098bf4f8c4345e183f6"
+        "revision" : "a67349c9d0b2bca0081f5218d9dcaa9e21c13c8f"
       }
     },
     {

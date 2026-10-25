@@ -25,7 +25,7 @@ let package = Package(
         .package(url: "https://github.com/luizmb/Hourglass.git", from: "1.0.1"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "603.0.1"),
         .package(url: "https://github.com/SwiftRex/SwiftRex.git", branch: "main", traits: ["ReactiveConcurrency"]),
-        .package(path: "../../libraries/ReactiveConcurrency"),
+        .package(url: "https://github.com/luizmb/ReactiveConcurrency.git", from: "2.1.0"),
         .package(url: "https://github.com/luizmb/NetworkTools.git", from: "0.9.0"),
     ] + vitralPackage,
     targets: [
